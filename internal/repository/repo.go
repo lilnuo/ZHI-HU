@@ -157,9 +157,9 @@ func (r *LikeRepository) CountLikes(targetID uint) (int64, error) {
 	err := r.DB.Model(&model.Like{}).Where("target_id=? AND type=1", targetID).Count(&count).Error
 	return count, err
 }
-func (r *LikeRepository) IsLike(userID, targetID uint) (bool, error) {
+func (r *LikeRepository) IsLike(userID, targetID uint, targetType int) (bool, error) {
 	var count int64
-	err := r.DB.Model(&model.Like{}).Where("user_id=? AND target_id=?", userID, targetID).Count(&count).Error
+	err := r.DB.Model(&model.Like{}).Where("user_id=? AND target_id=? AND type=?", userID, targetID, targetType).Count(&count).Error
 	return count > 0, err
 }
 
@@ -193,4 +193,11 @@ func (r *UserRepository) IsUserBanned(id uint) (bool, error) {
 		return false, err
 	}
 	return user.Status == 0, nil
+}
+
+// 排行榜补充
+func (r *PostRepository) GetLeaderboard(limit int) ([]model.Post, error) {
+	var posts []model.Post
+	err := r.DB.Preload("Author").Order("hotscore DESC").Limit(limit).Find(&posts).Error
+	return posts, err
 }

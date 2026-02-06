@@ -2,6 +2,7 @@ package handler
 
 import (
 	"go-zhihu/internal/service"
+	"go-zhihu/pkg/e"
 	"net/http"
 	"strconv"
 
@@ -196,10 +197,11 @@ func (h *Handler) ToggleLike(c *gin.Context) {
 	paramID := c.Param("post_id")
 	targetId, err := strconv.ParseUint(paramID, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的uid"})
 		return
 	}
-	if err := h.AuthService.ToggleLike(uid, uint(targetId)); err != nil {
+	const likeType = 1
+	if err := h.AuthService.ToggleLike(uid, uint(targetId), likeType); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "操作失败"})
 		return
 	}
@@ -250,7 +252,7 @@ func (h *Handler) GetFeed(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取动态失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": posts})
+	e.SuccessResponse(c, posts)
 }
 func (h *Handler) BanUser(c *gin.Context) {
 	_, exists := c.Get("user_id")
@@ -270,4 +272,22 @@ func (h *Handler) BanUser(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"msg": "操作成功"})
+}
+
+// 排行榜补充
+func (h *Handler) GetLeaderboard(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "10")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	posts, err := h.AuthService.GetLeaderboard(limit)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, posts)
 }

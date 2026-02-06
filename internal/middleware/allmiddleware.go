@@ -1,21 +1,24 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
+	"go-zhihu/config"
+	"go-zhihu/internal/repository"
+	"log"
+	"strconv"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
-	"go-zhihu/internal/repository"
-	"go-zhihu/internal/service"
-	"golang.org/x/net/context"
-	"strconv"
-	"time"
 
 	"net/http"
 	"strings"
 )
 
 type Claims struct {
+	ID       uint   `json:"user_id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
 	jwt.RegisteredClaims
@@ -35,7 +38,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 		tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-			return service.JwtSecret, nil
+			return []byte(config.Setting.JWT.Secret), nil
 		})
 		if err != nil || !token.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "token invalid"})
@@ -79,7 +82,12 @@ func RateLimit(rdb *redis.Client, requestLimit int) gin.HandlerFunc {
 }
 func CheckStatus(userRepo *repository.UserRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户身份未确认"})
+			c.Abort()
+			return
+		}
 		uid := userID.(uint)
 		isBanned, err := userRepo.IsUserBanned(uid)
 		if err != nil {
@@ -92,6 +100,22 @@ func CheckStatus(userRepo *repository.UserRepository) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		c.Next()
+	}
+}
+func CustomRecovery() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Printf("[panic recovered]URI:%s|Error:%v\n", c.Request.URL.Path, err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"code": 500,
+					"msg":  "服务器内部错误",
+					"data": nil,
+				})
+				c.Abort()
+			}
+		}()
 		c.Next()
 	}
 }

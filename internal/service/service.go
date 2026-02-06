@@ -2,15 +2,15 @@ package service
 
 import (
 	"errors"
+	"go-zhihu/config"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
-
-var JwtSecret = []byte("hahaha")
 
 type SocialService struct {
 	RelationRepo *repository.RelationRepository
@@ -19,12 +19,15 @@ type SocialService struct {
 	FeedRepo     *repository.FeedRepository
 	CommentRepo  *repository.CommentRepository
 	UserRepo     *repository.UserRepository
+	rdb          *redis.Client
+	secret       string
 }
 
 func NewUserService(relationRepo *repository.RelationRepository,
 	likeRepo *repository.LikeRepository, postRepo *repository.PostRepository,
 	feedRepo *repository.FeedRepository, commentRepo *repository.CommentRepository,
-	userRepo *repository.UserRepository) *SocialService {
+	userRepo *repository.UserRepository,
+	rdb *redis.Client, jwtSecret string) *SocialService {
 	return &SocialService{
 		RelationRepo: relationRepo,
 		LikeRepo:     likeRepo,
@@ -32,6 +35,8 @@ func NewUserService(relationRepo *repository.RelationRepository,
 		FeedRepo:     feedRepo,
 		CommentRepo:  commentRepo,
 		UserRepo:     userRepo,
+		rdb:          rdb,
+		secret:       jwtSecret,
 	}
 }
 
@@ -67,7 +72,7 @@ func (s *SocialService) generateToken(userID uint, username string) (string, err
 		"exp":      time.Now().Add(time.Hour * 24 * 7).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(JwtSecret)
+	return token.SignedString([]byte(config.Setting.JWT.Secret))
 }
 func (s *SocialService) Login(username, password string) (*LoginResponse, error) {
 	user, err := s.UserRepo.FindUsername(username)
@@ -149,12 +154,13 @@ func (s *SocialService) FollowUser(followerID, followeeID uint) error {
 func (s *SocialService) UnfollowUser(followerID, followeeID uint) error {
 	return s.RelationRepo.Unfollow(followerID, followeeID)
 }
-func (s *SocialService) ToggleLike(userID uint, targetID uint) error {
+func (s *SocialService) ToggleLike(userID uint, targetID uint, targetType int) error {
 	post, err := s.PostRepo.FindByID(targetID)
 	if err != nil {
 		return errors.New("not exist")
 	}
-	hasLiked, err := s.LikeRepo.IsLike(userID, targetID)
+	targetType = post.Type
+	hasLiked, err := s.LikeRepo.IsLike(userID, targetID, targetType)
 	if err != nil {
 		return err
 	}
@@ -168,7 +174,7 @@ func (s *SocialService) ToggleLike(userID uint, targetID uint) error {
 		}
 		return s.PostRepo.UpdateHotScore(targetID, newScore)
 	}
-	like := &model.Like{UserID: userID, TargetID: targetID}
+	like := &model.Like{UserID: userID, TargetID: targetID, Type: targetType}
 	if err := s.LikeRepo.AddLike(like); err != nil {
 		return err
 	}
@@ -233,4 +239,9 @@ func (s *SocialService) UnbanUser(targetID uint) error {
 		return errors.New("正常")
 	}
 	return s.UserRepo.UnbanUser(targetID)
+}
+
+// 排行榜补充
+func (s *SocialService) GetLeaderboard(limit int) ([]model.Post, error) {
+	return s.PostRepo.GetLeaderboard(limit)
 }
