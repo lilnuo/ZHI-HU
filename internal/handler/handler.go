@@ -3,7 +3,6 @@ package handler
 import (
 	"go-zhihu/internal/service"
 	"go-zhihu/pkg/e"
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -27,31 +26,54 @@ type LoginReq struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// 获取id并验证函数，减少重复代码
+func getUserID(c *gin.Context) (uint, bool) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		e.ErrorResponse(c, e.ErrUnAuthorizedInstance)
+		return 0, false
+	}
+	uid, ok := userID.(uint)
+	if !ok {
+		e.ErrorResponse(c, e.ErrServer)
+		return 0, false
+	}
+	return uid, true
+}
+func parseIDParam(c *gin.Context, paramKey string) (uint, error) {
+	paramID := c.Param(paramKey)
+	id, err := strconv.ParseUint(paramID, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return uint(id), nil
+}
+
 // 注册与登陆
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
 	if err := h.AuthService.Register(req.Username, req.Password, req.Email); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "注册成功"})
+	e.SuccessResponse(c, e.ErrSuccess)
 }
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
 	resp, err := h.AuthService.Login(req.Username, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, resp)
+	e.SuccessResponse(c, resp)
 }
 
 // 处理文章/问题·相关
@@ -62,79 +84,69 @@ type CreatePostRequest struct {
 }
 
 func (h *Handler) CreatPost(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	uid, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	uid := userID.(uint)
 	var req CreatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
 	if err := h.AuthService.CreatePost(uid, req.Title, req.Content, req.Type); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "发布失败"})
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "发布成功"})
+	e.SuccessResponse(c, nil)
 }
 func (h *Handler) GetPostDetail(c *gin.Context) {
-	paramID := c.Param("id")
-	postID, err := strconv.ParseUint(paramID, 10, 32)
+	postID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的id"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	post, err := h.AuthService.GetPostDetail(uint(postID))
+	post, err := h.AuthService.GetPostDetail(postID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "内容不存在"})
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, post)
+	e.SuccessResponse(c, post)
 }
 func (h *Handler) UpdatePost(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	uid, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	uid := userID.(uint)
-	paramID := c.Param("id")
-	postID, err := strconv.ParseUint(paramID, 10, 32)
+	postID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的id"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
 	var req CreatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+	}
+	if err := h.AuthService.UpdatePost(postID, uid, req.Title, req.Content); err != nil {
+		e.ErrorResponse(c, err)
 		return
 	}
-	if err := h.AuthService.UpdatePost(uint(postID), uid, req.Title, req.Content); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"msg": "更新成功"})
+	e.SuccessResponse(c, nil)
 }
 func (h *Handler) DeletePost(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	uid, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	uid := userID.(uint)
-	paramID := c.Param("id")
-	postID, err := strconv.ParseUint(paramID, 10, 32)
+	postID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的id"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.DeletePost(uint(postID), uid); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	if err := h.AuthService.DeletePost(postID, uid); err != nil {
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "删除成功"})
+	e.SuccessResponse(c, nil)
 }
 func (h *Handler) Search(c *gin.Context) {
 	keyword := c.DefaultQuery("keyword", "")
@@ -144,68 +156,60 @@ func (h *Handler) Search(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(pageSizeStr)
 	posts, err := h.AuthService.Search(keyword, page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "搜索失败"})
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": posts})
+	e.SuccessResponse(c, posts)
 }
 func (h *Handler) FollowUser(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	uid, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	uid := userID.(uint)
-	paramID := c.Param("id")
-	targetId, err := strconv.ParseUint(paramID, 10, 32)
+	targetID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的id"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+	}
+	if err := h.AuthService.FollowUser(uid, targetID); err != nil {
+		e.ErrorResponse(c, err)
 		return
 	}
-	if err := h.AuthService.FollowUser(uid, uint(targetId)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"msg": "关注成功"})
+	e.SuccessResponse(c, nil)
+
 }
 func (h *Handler) UnFollowUser(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	uid, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	uid := userID.(uint)
-	paramID := c.Param("id")
-	targetId, err := strconv.ParseUint(paramID, 10, 32)
+	targetID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的id"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.UnfollowUser(uid, uint(targetId)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := h.AuthService.UnfollowUser(uid, targetID); err != nil {
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "取消关注成功"})
+	e.SuccessResponse(c, nil)
 }
+
 func (h *Handler) ToggleLike(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	uid, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	uid := userID.(uint)
-	paramID := c.Param("post_id")
-	targetId, err := strconv.ParseUint(paramID, 10, 32)
+	targetID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的uid"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
 	const likeType = 1
-	if err := h.AuthService.ToggleLike(uid, uint(targetId), likeType); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "操作失败"})
+	if err := h.AuthService.ToggleLike(uid, targetID, likeType); err != nil {
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "操作成功"})
+	e.SuccessResponse(c, nil)
 }
 
 type AddCommentRequest struct {
@@ -213,65 +217,57 @@ type AddCommentRequest struct {
 }
 
 func (h *Handler) AddComment(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	uid, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	uid := userID.(uint)
-	paramID := c.Param("post_id")
-	postID, err := strconv.ParseUint(paramID, 10, 32)
+	postID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的id"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
 	var req AddCommentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误"})
-	}
-	if err := h.AuthService.AddComment(uint(postID), uid, req.Content); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "评论失败"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "评论成功"})
-	return
+	if err := h.AuthService.AddComment(postID, uid, req.Content); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
 }
 func (h *Handler) GetFeed(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	uid, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	uid := userID.(uint)
 	pageStr := c.DefaultQuery("page", "1")
 	pageSizeStr := c.DefaultQuery("page_size", "10")
 	page, _ := strconv.Atoi(pageStr)
 	pageSize, _ := strconv.Atoi(pageSizeStr)
 	posts, err := h.AuthService.GetFeed(uid, page, pageSize)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取动态失败"})
+		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, posts)
 }
 func (h *Handler) BanUser(c *gin.Context) {
-	_, exists := c.Get("user_id")
-
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+	_, ok := getUserID(c)
+	if !ok {
 		return
 	}
-	paramID := c.Param("user_id")
-	targetID, err := strconv.ParseUint(paramID, 10, 32)
+	targetID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的id"})
+		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.BanUser(uint(targetID)); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	if err := h.AuthService.BanUser(targetID); err != nil {
+		e.ErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "操作成功"})
+	e.SuccessResponse(c, nil)
 }
 
 // 排行榜补充
