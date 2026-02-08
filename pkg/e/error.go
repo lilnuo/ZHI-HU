@@ -7,15 +7,15 @@ const (
 	ErrorServer        = 500
 	ErrorInvalidParams = 400
 	//用户错误代码
-	ErrUserExist    = 10001
-	ErrUserNotFound = 10002
-	ErrPassword     = 10003
-	ErrorUserBanned = 10004
-	ErrorToken      = 10005
-	ErrPermisson    = 10006
-	ErrActionFailed = 10007
-	//业务
+	ErrUserExist      = 10001
+	ErrUserNotFound   = 10002
+	ErrPassword       = 10003
+	ErrorUserBanned   = 10004
+	ErrorToken        = 10005
+	ErrPermisson      = 10006
+	ErrActionFailed   = 10007
 	ErrorPostNotFound = 20001
+	ErrUnAuthorized   = 40101
 )
 
 type Error struct {
@@ -47,4 +47,5 @@ var (
 	ErrSelfAction           = New(ErrActionFailed, "不能对自己执行此操作")
 	ErrAlreadyFollowing     = New(ErrActionFailed, "已经关注了")
 	ErrUserNormal           = New(ErrActionFailed, "用户状态正常，无需操作")
+	ErrUnAuthorizedInstance = New(ErrUnAuthorized, "未登录或token无效")
 )
