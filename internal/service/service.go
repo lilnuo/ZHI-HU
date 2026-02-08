@@ -1,10 +1,10 @@
 package service
 
 import (
-	"errors"
 	"go-zhihu/config"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
+	"go-zhihu/pkg/e"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -48,11 +48,11 @@ type LoginResponse struct {
 func (s *SocialService) Register(username, password, email string) error {
 	_, err := s.UserRepo.FindUsername(username)
 	if err == nil {
-		return errors.New("already exist")
+		return e.ErrorUserExist
 	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return e.ErrPasswordInstance
 	}
 	user := &model.User{
 		Username: username,
@@ -61,7 +61,10 @@ func (s *SocialService) Register(username, password, email string) error {
 		Role:     1,
 		Status:   1, //默认正常
 	}
-	return s.UserRepo.CreateUser(user)
+	if err := s.UserRepo.CreateUser(user); err != nil {
+		return e.ErrServer
+	}
+	return nil
 }
 
 // 鉴权加密，环境获取
@@ -77,17 +80,17 @@ func (s *SocialService) generateToken(userID uint, username string) (string, err
 func (s *SocialService) Login(username, password string) (*LoginResponse, error) {
 	user, err := s.UserRepo.FindUsername(username)
 	if err != nil {
-		return nil, errors.New("user not exist")
+		return nil, e.ErrorUserExist
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return nil, errors.New("password wrong")
+		return nil, e.ErrPasswordInstance
 	}
 	if user.Status == 0 {
-		return nil, errors.New("账号已被禁言")
+		return nil, e.ErrUserBanned
 	}
 	token, err := s.generateToken(user.ID, user.Username)
 	if err != nil {
-		return nil, err
+		return nil, e.ErrToken
 	}
 	return &LoginResponse{
 		Token: token,
@@ -106,33 +109,46 @@ func (s *SocialService) CreatePost(authorID uint, title, content string, postTyp
 		Status:   1, //默认发布
 		Hotscore: 0,
 	}
-	return s.PostRepo.CreatePost(post)
+	if err := s.PostRepo.CreatePost(post); err != nil {
+		return e.ErrServer
+	}
+	return nil
 }
 func (s *SocialService) GetPostDetail(postID uint) (*model.Post, error) {
-	return s.PostRepo.FindByID(postID)
+	post, err := s.PostRepo.FindByID(postID)
+	if err != nil {
+		return nil, e.ErrPostNotFound
+	}
+	return post, nil
 }
 func (s *SocialService) UpdatePost(postID, authorID uint, title, content string) error {
 	post, err := s.PostRepo.FindByID(postID)
 	if err != nil {
-		return nil
+		return e.ErrPostNotFound
 	}
 	if post.AuthorID != authorID {
-		return errors.New("无权修改此文章")
+		return e.ErrPermission
 	}
 	post.Title = title
 	post.Content = content
-	return s.PostRepo.UpdatePost(post)
+	if err := s.PostRepo.UpdatePost(post); err != nil {
+		return e.ErrServer
+	}
+	return nil
 }
 func (s *SocialService) DeletePost(postID, authorID uint) error {
 	post, err := s.PostRepo.FindByID(postID)
 	if err != nil {
-		return err
+		return e.ErrPostNotFound
 	}
 	if post.AuthorID != authorID {
-		return errors.New("无权删除")
+		return e.ErrPermission
 	}
 	post.Status = 2
-	return s.PostRepo.UpdatePost(post)
+	if err := s.PostRepo.UpdatePost(post); err != nil {
+		return e.ErrServer
+	}
+	return nil
 }
 func (s *SocialService) Search(keyword string, page, pageSize int) ([]model.Post, error) {
 	offset := (page - 1) * pageSize
@@ -143,30 +159,36 @@ func (s *SocialService) Search(keyword string, page, pageSize int) ([]model.Post
 
 func (s *SocialService) FollowUser(followerID, followeeID uint) error {
 	if followerID == followeeID {
-		return errors.New("不能关注自己")
+		return e.ErrSelfAction
 	}
 	isFollowing, _ := s.RelationRepo.IsFollowing(followerID, followeeID)
 	if isFollowing {
-		return errors.New("已经关注了")
+		return e.ErrAlreadyFollowing
 	}
-	return s.RelationRepo.Follow(followerID, followeeID)
+	if err := s.RelationRepo.Follow(followerID, followeeID); err != nil {
+		return e.ErrServer
+	}
+	return nil
 }
 func (s *SocialService) UnfollowUser(followerID, followeeID uint) error {
-	return s.RelationRepo.Unfollow(followerID, followeeID)
+	if err := s.RelationRepo.Unfollow(followerID, followeeID); err != nil {
+		return e.ErrServer
+	}
+	return nil
 }
 func (s *SocialService) ToggleLike(userID uint, targetID uint, targetType int) error {
 	post, err := s.PostRepo.FindByID(targetID)
 	if err != nil {
-		return errors.New("not exist")
+		return e.ErrPostNotFound
 	}
 	targetType = post.Type
 	hasLiked, err := s.LikeRepo.IsLike(userID, targetID, targetType)
 	if err != nil {
-		return err
+		return e.ErrServer
 	}
 	if hasLiked {
 		if err := s.LikeRepo.RemoveLike(userID, targetID, post.Type); err != nil {
-			return err
+			return e.ErrServer
 		}
 		newScore := post.Hotscore - 10
 		if newScore < 0 {
@@ -176,7 +198,7 @@ func (s *SocialService) ToggleLike(userID uint, targetID uint, targetType int) e
 	}
 	like := &model.Like{UserID: userID, TargetID: targetID, Type: targetType}
 	if err := s.LikeRepo.AddLike(like); err != nil {
-		return err
+		return e.ErrServer
 	}
 	newScore := post.Hotscore + 10
 	return s.PostRepo.UpdateHotScore(targetID, newScore)
@@ -189,7 +211,7 @@ func (s *SocialService) AddComment(postID, authorID uint, content string) error 
 	}
 	err := s.CommentRepo.CreateComment(comment)
 	if err != nil {
-		return err
+		return e.ErrServer
 	}
 	post, _ := s.PostRepo.FindByID(postID)
 	if post != nil {
@@ -201,7 +223,7 @@ func (s *SocialService) AddComment(postID, authorID uint, content string) error 
 func (s *SocialService) GetFeed(userID uint, page, pageSize int) ([]model.Post, error) {
 	followeeIDs, err := s.RelationRepo.GetFolloweeIDs(userID)
 	if err != nil {
-		return nil, err
+		return nil, e.ErrServer
 	}
 	if len(followeeIDs) == 0 {
 		return []model.Post{}, nil
@@ -209,34 +231,37 @@ func (s *SocialService) GetFeed(userID uint, page, pageSize int) ([]model.Post, 
 	offset := (page - 1) * pageSize
 	posts, err := s.FeedRepo.GetFeedByUserIDs(followeeIDs, offset, pageSize)
 	if err != nil {
-		return nil, err
+		return nil, e.ErrServer
 	}
 	return posts, nil
 }
 func (s *SocialService) BanUser(id uint) error {
 	isBanned, err := s.UserRepo.IsUserBanned(id)
 	if err != nil {
-		return errors.New("用户不存在或数据库查询失败")
+		return e.ErrUserBanned
 	}
 	user, err := s.UserRepo.FindByID(id)
 	if err != nil {
-		return err
+		return e.ErrUserNotFoundInstance
 	}
 	if user.Role == 1 {
-		return errors.New("无权禁言管理员")
+		return e.ErrPermission
 	}
 	if !isBanned {
-		return errors.New("正常，无需解除管理")
+		if err := s.UserRepo.BanUser(id); err != nil {
+			return e.ErrServer
+		}
 	}
-	return s.UserRepo.BanUser(id)
+	return nil
+
 }
 func (s *SocialService) UnbanUser(targetID uint) error {
 	targetUser, err := s.UserRepo.FindByID(targetID)
 	if err != nil {
-		return errors.New("用户不存在")
+		return e.ErrUserNotFoundInstance
 	}
 	if targetUser.Status == 1 {
-		return errors.New("正常")
+		return e.ErrUserNormal
 	}
 	return s.UserRepo.UnbanUser(targetID)
 }

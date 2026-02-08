@@ -11,6 +11,9 @@ const (
 	ErrUserNotFound = 10002
 	ErrPassword     = 10003
 	ErrorUserBanned = 10004
+	ErrorToken      = 10005
+	ErrPermisson    = 10006
+	ErrActionFailed = 10007
 	//业务
 	ErrorPostNotFound = 20001
 )
@@ -39,4 +42,9 @@ var (
 	ErrPasswordInstance     = New(ErrPassword, "密码错误")
 	ErrUserBanned           = New(ErrorUserBanned, "用户被禁言")
 	ErrPostNotFound         = New(ErrorPostNotFound, "文章不存在")
+	ErrToken                = New(ErrorToken, "Token 生成失败")
+	ErrPermission           = New(ErrPermisson, "无权修改")
+	ErrSelfAction           = New(ErrActionFailed, "不能对自己执行此操作")
+	ErrAlreadyFollowing     = New(ErrActionFailed, "已经关注了")
+	ErrUserNormal           = New(ErrActionFailed, "用户状态正常，无需操作")
 )
