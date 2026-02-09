@@ -25,6 +25,10 @@ type LoginReq struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
+type UpdateProfileRe struct {
+	Avatar string `json:"avatar" binding:"omitempty"`
+	Bio    string `json:"bio" binding:"omitempty,max=500"`
+}
 
 // 获取id并验证函数，减少重复代码
 func getUserID(c *gin.Context) (uint, bool) {
@@ -76,11 +80,30 @@ func (h *Handler) Login(c *gin.Context) {
 	e.SuccessResponse(c, resp)
 }
 
+// 更新个人信息
+func (h *Handler) UpdateProfile(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	var req UpdateProfileRe
+	if err := c.ShouldBindJSON(&req); err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	if err := h.AuthService.UpdateProfile(uid, req.Avatar, req.Bio); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
+}
+
 // 处理文章/问题·相关
 type CreatePostRequest struct {
 	Title   string `json:"title" binding:"required"`
 	Content string `json:"content" binding:"required"`
 	Type    int    `json:"type" binding:"required,oneof=1 2"` //1.chapter 2.question
+	Status  int    `json:"status" binding:"required"`
 }
 
 func (h *Handler) CreatPost(c *gin.Context) {
@@ -93,12 +116,66 @@ func (h *Handler) CreatPost(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.CreatePost(uid, req.Title, req.Content, req.Type); err != nil {
+	if err := h.AuthService.CreatePost(uid, req.Title, req.Content, req.Type, req.Status); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, nil)
 }
+
+// 获取草稿箱列表
+func (h *Handler) GetDrafts(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize > 50 {
+		pageSize = 50
+	}
+	drafts, err := h.AuthService.GetDrafts(uid, page, pageSize)
+	if err != nil {
+		e.ErrorResponse(c, e.ErrServer)
+		return
+	}
+	e.SuccessResponse(c, drafts)
+}
+
+// 获取最新文章列表
+func (h *Handler) GetLatestPosts(c *gin.Context) {
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	posts, err := h.AuthService.GetLatestPosts(page, pageSize)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, posts)
+}
+
+// 看评论
+func (h *Handler) GetComments(c *gin.Context) {
+	postID, err := parseIDParam(c, "post_id")
+	if err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	comments, err := h.AuthService.GetComments(postID)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, comments)
+}
+
 func (h *Handler) GetPostDetail(c *gin.Context) {
 	postID, err := parseIDParam(c, "id")
 	if err != nil {

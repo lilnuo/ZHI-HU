@@ -18,11 +18,15 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler) {
 		publicGroup.GET("/posts/search", httpHandler.Search)
 		publicGroup.GET("/posts/ranking", httpHandler.GetLeaderboard)
 	}
-	authGroup := r.Group("/api/v1")
+	authGroup := r.Group("/user")
 	authGroup.Use(middleware.AuthMiddleware())
-	{ //chapter
+	{
 		writerGroup := authGroup.Group("/")
-
+		//user
+		writerGroup.PUT("profile", httpHandler.UpdateProfile)
+		//chapter
+		writerGroup.GET("/posts/drafts", httpHandler.GetDrafts)
+		writerGroup.GET("/posts/posts_lists", httpHandler.GetLatestPosts)
 		writerGroup.POST("/posts", httpHandler.CreatPost)
 		authGroup.GET("posts/:id", httpHandler.GetPostDetail) //只读操作，不限流
 		writerGroup.PUT("/posts/:id", httpHandler.UpdatePost)
@@ -32,6 +36,7 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler) {
 		writerGroup.POST("/unfollow/:id", httpHandler.UnFollowUser)
 		writerGroup.POST("/like/:post_id", httpHandler.ToggleLike)
 		//comment
+		writerGroup.GET("/posts/comments", httpHandler.GetComments)
 		writerGroup.POST("/posts/:post_id/comments", httpHandler.AddComment)
 		//feed
 		authGroup.GET("/feed", httpHandler.GetFeed)

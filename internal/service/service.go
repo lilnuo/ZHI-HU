@@ -98,15 +98,33 @@ func (s *SocialService) Login(username, password string) (*LoginResponse, error)
 	}, nil
 }
 
+// 个人信息的修改
+func (s *SocialService) UpdateProfile(userID uint, avatar, bio string) error {
+	_, err := s.UserRepo.FindByID(userID)
+	if err != nil {
+		return e.ErrUserNotFoundInstance
+	}
+	if len(bio) > 500 {
+		return e.ErrInvalidArgs
+	}
+	if err := s.UserRepo.UpdateProfile(userID, avatar, bio); err != nil {
+		return e.ErrServer
+	}
+	return nil
+}
+
 // 处理内容的发布、更新、获取和删
 
-func (s *SocialService) CreatePost(authorID uint, title, content string, postType int) error {
+func (s *SocialService) CreatePost(authorID uint, title, content string, postType int, status int) error {
+	if status != 0 && status != 1 {
+		status = 1
+	}
 	post := &model.Post{
 		Title:    title,
 		Content:  content,
 		Type:     postType, //1.chapter,2.question
 		AuthorID: authorID,
-		Status:   1, //默认发布
+		Status:   status, //默认发布
 		Hotscore: 0,
 	}
 	if err := s.PostRepo.CreatePost(post); err != nil {
@@ -114,12 +132,56 @@ func (s *SocialService) CreatePost(authorID uint, title, content string, postTyp
 	}
 	return nil
 }
-func (s *SocialService) GetPostDetail(postID uint) (*model.Post, error) {
+
+//补充普通的最新文章列表
+
+func (s *SocialService) GetLatestPosts(page, pageSize int) ([]model.Post, error) {
+	offset := (page - 1) * pageSize
+	return s.PostRepo.ListPosts(offset, pageSize, "created_at")
+}
+
+// 查看评论
+func (s *SocialService) GetComments(postID uint) ([]model.Comment, error) {
+	_, err := s.PostRepo.FindByID(postID)
+	if err != nil {
+		return nil, e.ErrPostNotFound
+	}
+	return s.CommentRepo.GetCommentByPostID(postID)
+}
+func (s *SocialService) GetPostDetail(postID uint) (*PostDetailVO, error) {
 	post, err := s.PostRepo.FindByID(postID)
 	if err != nil {
 		return nil, e.ErrPostNotFound
 	}
-	return post, nil
+	count, err := s.LikeRepo.CountLikes(postID)
+	if err != nil {
+		count = 0
+	}
+	return &PostDetailVO{
+		Post:      post,
+		LikeCount: count,
+	}, nil
+}
+
+// 获取草稿箱
+func (s *SocialService) GetDrafts(userID uint, page, pageSize int) ([]model.Post, error) {
+	offset := (page - 1) * pageSize
+	return s.PostRepo.ListDrafts(userID, offset, pageSize)
+}
+
+// 发布草稿箱
+func (s *SocialService) PublishPost(postID, authorID uint) error {
+	post, err := s.PostRepo.FindByID(postID)
+	if err != nil {
+		return e.ErrPostNotFound
+	}
+	if post.AuthorID != authorID {
+		return e.ErrPermission
+	}
+	if post.Status != 0 {
+		return e.ErrInvalidArgs
+	}
+	return s.PostRepo.UpdateStatus(postID, 1)
 }
 func (s *SocialService) UpdatePost(postID, authorID uint, title, content string) error {
 	post, err := s.PostRepo.FindByID(postID)
@@ -269,4 +331,10 @@ func (s *SocialService) UnbanUser(targetID uint) error {
 // 排行榜补充
 func (s *SocialService) GetLeaderboard(limit int) ([]model.Post, error) {
 	return s.PostRepo.GetLeaderboard(limit)
+}
+
+// 补充点赞统计
+type PostDetailVO struct {
+	*model.Post
+	LikeCount int64 `json:"like_count"`
 }

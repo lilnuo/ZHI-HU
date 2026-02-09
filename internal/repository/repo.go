@@ -2,6 +2,7 @@ package repository
 
 import (
 	"go-zhihu/internal/model"
+	"go-zhihu/pkg/e"
 	"regexp"
 	"strings"
 
@@ -36,8 +37,20 @@ func (r *UserRepository) FindByID(id uint) (*model.User, error) {
 	}
 	return &user, nil
 }
-func (r *UserRepository) UpdateStatus(id uint, status int) error {
-	return r.DB.Model(&model.User{}).Where("id=?", id).Update("status", status).Error
+
+// 个人信息更改
+func (r *UserRepository) UpdateProfile(userID uint, avatar, bio string) error {
+	updates := map[string]interface{}{}
+	if avatar != "" {
+		updates["avatar"] = avatar
+	}
+	if bio != "" {
+		updates["bio"] = bio
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return r.DB.Model(&model.User{}).Where("id=?", userID).Updates(updates).Error
 }
 
 type PostRepository struct {
@@ -54,8 +67,17 @@ func (r *PostRepository) CreatePost(post *model.Post) error {
 }
 func (r *PostRepository) FindByID(id uint) (*model.Post, error) {
 	var post model.Post
-	err := r.DB.Preload("Author").Preload("Comments.Author").First(&post, id).Error
+	err := r.DB.Where("status IN ?", []int{0, 1}).Preload("Author").Preload("Comments.Author").First(&post, id).Error
+	if err != nil {
+		return nil, e.ErrInvalidArgs
+	}
+	if post.Status == 2 {
+		return nil, e.ErrPostNotFound
+	}
 	return &post, err
+}
+func (r *PostRepository) UpdateStatus(postID uint, status int) error {
+	return r.DB.Model(&model.Post{}).Where("id = ?", postID).Update("status", status).Error
 }
 func (r *PostRepository) UpdatePost(post *model.Post) error {
 	return r.DB.Save(post).Error
@@ -65,7 +87,15 @@ func (r *PostRepository) UpdateHotScore(targetID uint, newScore float64) error {
 }
 func (r *PostRepository) ListPosts(offset, limit int, orderBy string) ([]model.Post, error) {
 	var posts []model.Post
-	err := r.DB.Preload("Author").Order(orderBy + " desc").Offset(offset).Limit(limit).Find(&posts).Error
+	err := r.DB.Where("status=?", 1).Preload("Author").Order(orderBy + " desc").Offset(offset).Limit(limit).Find(&posts).Error
+	return posts, err
+}
+
+// 获取指定用户草稿箱列表
+func (r *PostRepository) ListDrafts(userID uint, offset, limit int) ([]model.Post, error) {
+	var posts []model.Post
+	//降序排列
+	err := r.DB.Where("author_id = ? AND status=?", userID, 0).Order("updated_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
 	return posts, err
 }
 
