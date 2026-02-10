@@ -5,6 +5,7 @@ import (
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"go-zhihu/pkg/e"
+	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -13,30 +14,33 @@ import (
 )
 
 type SocialService struct {
-	RelationRepo *repository.RelationRepository
-	LikeRepo     *repository.LikeRepository
-	PostRepo     *repository.PostRepository
-	FeedRepo     *repository.FeedRepository
-	CommentRepo  *repository.CommentRepository
-	UserRepo     *repository.UserRepository
-	rdb          *redis.Client
-	secret       string
+	RelationRepo   *repository.RelationRepository
+	LikeRepo       *repository.LikeRepository
+	PostRepo       *repository.PostRepository
+	FeedRepo       *repository.FeedRepository
+	CommentRepo    *repository.CommentRepository
+	UserRepo       *repository.UserRepository
+	ConnectionRepo *repository.ConnectRepository
+	rdb            *redis.Client
+	secret         string
 }
 
 func NewUserService(relationRepo *repository.RelationRepository,
 	likeRepo *repository.LikeRepository, postRepo *repository.PostRepository,
 	feedRepo *repository.FeedRepository, commentRepo *repository.CommentRepository,
 	userRepo *repository.UserRepository,
-	rdb *redis.Client, jwtSecret string) *SocialService {
+	rdb *redis.Client, jwtSecret string,
+	connectionRepo *repository.ConnectRepository) *SocialService {
 	return &SocialService{
-		RelationRepo: relationRepo,
-		LikeRepo:     likeRepo,
-		PostRepo:     postRepo,
-		FeedRepo:     feedRepo,
-		CommentRepo:  commentRepo,
-		UserRepo:     userRepo,
-		rdb:          rdb,
-		secret:       jwtSecret,
+		RelationRepo:   relationRepo,
+		LikeRepo:       likeRepo,
+		PostRepo:       postRepo,
+		FeedRepo:       feedRepo,
+		CommentRepo:    commentRepo,
+		UserRepo:       userRepo,
+		ConnectionRepo: connectionRepo,
+		rdb:            rdb,
+		secret:         jwtSecret,
 	}
 }
 
@@ -68,10 +72,11 @@ func (s *SocialService) Register(username, password, email string) error {
 }
 
 // 鉴权加密，环境获取
-func (s *SocialService) generateToken(userID uint, username string) (string, error) {
+func (s *SocialService) generateToken(userID uint, username string, role int) (string, error) {
 	claims := &jwt.MapClaims{
 		"user_id":  userID,
 		"username": username,
+		"role":     strconv.Itoa(role),
 		"exp":      time.Now().Add(time.Hour * 24 * 7).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -80,7 +85,7 @@ func (s *SocialService) generateToken(userID uint, username string) (string, err
 func (s *SocialService) Login(username, password string) (*LoginResponse, error) {
 	user, err := s.UserRepo.FindUsername(username)
 	if err != nil {
-		return nil, e.ErrorUserExist
+		return nil, e.ErrUserNotFoundInstance
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return nil, e.ErrPasswordInstance
@@ -88,7 +93,7 @@ func (s *SocialService) Login(username, password string) (*LoginResponse, error)
 	if user.Status == 0 {
 		return nil, e.ErrUserBanned
 	}
-	token, err := s.generateToken(user.ID, user.Username)
+	token, err := s.generateToken(user.ID, user.Username, user.Role)
 	if err != nil {
 		return nil, e.ErrToken
 	}
@@ -100,7 +105,7 @@ func (s *SocialService) Login(username, password string) (*LoginResponse, error)
 
 // 个人信息的修改
 func (s *SocialService) UpdateProfile(userID uint, avatar, bio string) error {
-	_, err := s.UserRepo.FindByID(userID)
+	_, err := s.UserRepo.FindUserByID(userID)
 	if err != nil {
 		return e.ErrUserNotFoundInstance
 	}
@@ -142,14 +147,14 @@ func (s *SocialService) GetLatestPosts(page, pageSize int) ([]model.Post, error)
 
 // 查看评论
 func (s *SocialService) GetComments(postID uint) ([]model.Comment, error) {
-	_, err := s.PostRepo.FindByID(postID)
+	_, err := s.PostRepo.FindPostByID(postID)
 	if err != nil {
 		return nil, e.ErrPostNotFound
 	}
 	return s.CommentRepo.GetCommentByPostID(postID)
 }
 func (s *SocialService) GetPostDetail(postID uint) (*PostDetailVO, error) {
-	post, err := s.PostRepo.FindByID(postID)
+	post, err := s.PostRepo.FindPostByID(postID)
 	if err != nil {
 		return nil, e.ErrPostNotFound
 	}
@@ -171,7 +176,7 @@ func (s *SocialService) GetDrafts(userID uint, page, pageSize int) ([]model.Post
 
 // 发布草稿箱
 func (s *SocialService) PublishPost(postID, authorID uint) error {
-	post, err := s.PostRepo.FindByID(postID)
+	post, err := s.PostRepo.FindPostByID(postID)
 	if err != nil {
 		return e.ErrPostNotFound
 	}
@@ -183,8 +188,8 @@ func (s *SocialService) PublishPost(postID, authorID uint) error {
 	}
 	return s.PostRepo.UpdateStatus(postID, 1)
 }
-func (s *SocialService) UpdatePost(postID, authorID uint, title, content string) error {
-	post, err := s.PostRepo.FindByID(postID)
+func (s *SocialService) UpdatePost(postID, authorID uint, title, content string, status *int) error {
+	post, err := s.PostRepo.FindPostByID(postID)
 	if err != nil {
 		return e.ErrPostNotFound
 	}
@@ -193,13 +198,18 @@ func (s *SocialService) UpdatePost(postID, authorID uint, title, content string)
 	}
 	post.Title = title
 	post.Content = content
+	if status != nil {
+		if *status == 0 || *status == 1 {
+			post.Status = *status
+		}
+	}
 	if err := s.PostRepo.UpdatePost(post); err != nil {
 		return e.ErrServer
 	}
 	return nil
 }
 func (s *SocialService) DeletePost(postID, authorID uint) error {
-	post, err := s.PostRepo.FindByID(postID)
+	post, err := s.PostRepo.FindPostByID(postID)
 	if err != nil {
 		return e.ErrPostNotFound
 	}
@@ -238,8 +248,9 @@ func (s *SocialService) UnfollowUser(followerID, followeeID uint) error {
 	}
 	return nil
 }
+
 func (s *SocialService) ToggleLike(userID uint, targetID uint, targetType int) error {
-	post, err := s.PostRepo.FindByID(targetID)
+	post, err := s.PostRepo.FindPostByID(targetID)
 	if err != nil {
 		return e.ErrPostNotFound
 	}
@@ -275,12 +286,24 @@ func (s *SocialService) AddComment(postID, authorID uint, content string) error 
 	if err != nil {
 		return e.ErrServer
 	}
-	post, _ := s.PostRepo.FindByID(postID)
+	post, _ := s.PostRepo.FindPostByID(postID)
 	if post != nil {
 		newScore := post.Hotscore + 5
 		_ = s.PostRepo.UpdateHotScore(postID, newScore)
 	}
 	return nil
+}
+
+// 获取当前用户的粉丝列表
+func (s *SocialService) GetFollowers(userID uint, page, pageSize int) ([]model.User, error) {
+	offset := (page - 1) * pageSize
+	return s.RelationRepo.GetFollowers(userID, offset, pageSize)
+}
+
+// 获取当前用户的关注列表
+func (s *SocialService) GetFollowees(userID uint, page, pageSize int) ([]model.User, error) {
+	offset := (page - 1) * pageSize
+	return s.RelationRepo.GetFollowees(userID, offset, pageSize)
 }
 func (s *SocialService) GetFeed(userID uint, page, pageSize int) ([]model.Post, error) {
 	followeeIDs, err := s.RelationRepo.GetFolloweeIDs(userID)
@@ -298,27 +321,21 @@ func (s *SocialService) GetFeed(userID uint, page, pageSize int) ([]model.Post, 
 	return posts, nil
 }
 func (s *SocialService) BanUser(id uint) error {
-	isBanned, err := s.UserRepo.IsUserBanned(id)
-	if err != nil {
-		return e.ErrUserBanned
-	}
-	user, err := s.UserRepo.FindByID(id)
+	user, err := s.UserRepo.FindUserByID(id)
 	if err != nil {
 		return e.ErrUserNotFoundInstance
 	}
-	if user.Role == 1 {
+	if user.Role == 2 {
 		return e.ErrPermission
 	}
-	if !isBanned {
-		if err := s.UserRepo.BanUser(id); err != nil {
-			return e.ErrServer
-		}
+	if err := s.UserRepo.BanUser(id); err != nil {
+		return e.ErrServer
 	}
 	return nil
 
 }
 func (s *SocialService) UnbanUser(targetID uint) error {
-	targetUser, err := s.UserRepo.FindByID(targetID)
+	targetUser, err := s.UserRepo.FindUserByID(targetID)
 	if err != nil {
 		return e.ErrUserNotFoundInstance
 	}
@@ -337,4 +354,26 @@ func (s *SocialService) GetLeaderboard(limit int) ([]model.Post, error) {
 type PostDetailVO struct {
 	*model.Post
 	LikeCount int64 `json:"like_count"`
+}
+
+// 添加收藏关注列表
+func (s *SocialService) ToggleConn(userID, postID uint) error {
+	_, err := s.PostRepo.FindPostByID(postID)
+	if err != nil {
+		return e.ErrPostNotFound
+	}
+	isConn, err := s.ConnectionRepo.IsConn(userID, postID)
+	if err != nil {
+		return e.ErrServer
+	}
+	if isConn {
+		return s.ConnectionRepo.RemoveConn(userID, postID)
+	}
+	return s.ConnectionRepo.AddConnection(userID, postID)
+}
+
+// 获取列表
+func (s *SocialService) GetConn(userID uint, page, pageSze int) ([]model.Post, error) {
+	offset := (page - 1) * pageSze
+	return s.ConnectionRepo.GetConnByUser(userID, offset, pageSze)
 }

@@ -29,7 +29,7 @@ func (r *UserRepository) FindUsername(username string) (*model.User, error) {
 	}
 	return &user, nil
 }
-func (r *UserRepository) FindByID(id uint) (*model.User, error) {
+func (r *UserRepository) FindUserByID(id uint) (*model.User, error) {
 	var user model.User
 	err := r.DB.First(&user, id).Error
 	if err != nil {
@@ -65,7 +65,7 @@ func NewPostRepository(db *gorm.DB) *PostRepository {
 func (r *PostRepository) CreatePost(post *model.Post) error {
 	return r.DB.Create(post).Error
 }
-func (r *PostRepository) FindByID(id uint) (*model.Post, error) {
+func (r *PostRepository) FindPostByID(id uint) (*model.Post, error) {
 	var post model.Post
 	err := r.DB.Where("status IN ?", []int{0, 1}).Preload("Author").Preload("Comments.Author").First(&post, id).Error
 	if err != nil {
@@ -167,6 +167,20 @@ func (r *RelationRepository) IsFollowing(followerID, followeeID uint) (bool, err
 	return count > 0, err
 }
 
+// 获取粉丝列表（谁关注了我）
+func (r *RelationRepository) GetFollowers(userID uint, offset, limit int) ([]model.User, error) {
+	var users []model.User
+	err := r.DB.Table("users").Joins("JOIN relations ON user_id = relations.follower_id").Where("relations.followee_id=?", userID).Order("relations.created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
+	return users, err
+}
+
+// 获取关注列表
+func (r *RelationRepository) GetFollowees(userID uint, offset, limit int) ([]model.User, error) {
+	var users []model.User
+	err := r.DB.Table("users").Joins("JOIN relations ON users.id = relations.followee_id").Where("relations.follower_id =?", userID).Order("relations.created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
+	return users, err
+}
+
 type LikeRepository struct {
 	DB *gorm.DB
 }
@@ -228,6 +242,39 @@ func (r *UserRepository) IsUserBanned(id uint) (bool, error) {
 // 排行榜补充
 func (r *PostRepository) GetLeaderboard(limit int) ([]model.Post, error) {
 	var posts []model.Post
-	err := r.DB.Preload("Author").Order("hotscore DESC").Limit(limit).Find(&posts).Error
+	err := r.DB.Where("status=?", 1).Preload("Author").Order("hot_score DESC").Limit(limit).Find(&posts).Error
+	return posts, err
+}
+
+type ConnectRepository struct {
+	DB *gorm.DB
+}
+
+func NewConnectionRepository(db *gorm.DB) *ConnectRepository {
+	return &ConnectRepository{DB: db}
+}
+
+// 关注文章或问题
+func (r ConnectRepository) AddConnection(userID, postID uint) error {
+	conn := &model.Connection{
+		UserID: userID,
+		PostID: postID,
+	}
+	return r.DB.Create(conn).Error
+}
+func (r *ConnectRepository) RemoveConn(userID, postID uint) error {
+	return r.DB.Where("user_id=? AND post_id =?", userID, postID).Delete(&model.Connection{}).Error
+}
+
+func (r *ConnectRepository) IsConn(userID, postID uint) (bool, error) {
+	var count int64
+	err := r.DB.Model(&model.Connection{}).Where("user_id=? AND post_id=?", userID, postID).Count(&count).Error
+	return count > 0, err
+}
+
+// 获取关注收藏列表
+func (r *ConnectRepository) GetConnByUser(userID uint, offset, limit int) ([]model.Post, error) {
+	var posts []model.Post
+	err := r.DB.Table("posts").Joins("JOIN connections ON posts.id =connections.post_id").Where("connections.user_id=?", userID).Order("connections.created_at DESC").Offset(offset).Limit(limit).Error
 	return posts, err
 }

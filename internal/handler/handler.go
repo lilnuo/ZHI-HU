@@ -28,6 +28,7 @@ type LoginReq struct {
 type UpdateProfileRe struct {
 	Avatar string `json:"avatar" binding:"omitempty"`
 	Bio    string `json:"bio" binding:"omitempty,max=500"`
+	Status *int   `json:"status"` //用*区分不传与传0
 }
 
 // 获取id并验证函数，减少重复代码
@@ -203,7 +204,25 @@ func (h *Handler) UpdatePost(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 	}
-	if err := h.AuthService.UpdatePost(postID, uid, req.Title, req.Content); err != nil {
+	if err := h.AuthService.UpdatePost(postID, uid, req.Title, req.Content, &req.Status); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
+}
+
+// 发布草稿
+func (h *Handler) PublishPost(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	postID, err := parseIDParam(c, "id")
+	if err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	if err := h.AuthService.PublishPost(postID, uid); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -347,6 +366,24 @@ func (h *Handler) BanUser(c *gin.Context) {
 	e.SuccessResponse(c, nil)
 }
 
+// 解禁补充
+func (h *Handler) UnbanUser(c *gin.Context) {
+	_, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	targetID, err := parseIDParam(c, "id")
+	if err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	if err := h.AuthService.UnbanUser(targetID); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
+}
+
 // 排行榜补充
 func (h *Handler) GetLeaderboard(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
@@ -358,6 +395,92 @@ func (h *Handler) GetLeaderboard(c *gin.Context) {
 		limit = 100
 	}
 	posts, err := h.AuthService.GetLeaderboard(limit)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, posts)
+}
+
+// 获取粉丝或关注列表
+func (h *Handler) GetFollowers(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "20")
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	users, err := h.AuthService.GetFollowers(uid, page, pageSize)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, users)
+}
+func (h *Handler) GetFollowees(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "20")
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	users, err := h.AuthService.GetFollowees(uid, page, pageSize)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, users)
+}
+
+// 关注收藏文章或问题
+func (h *Handler) ToggleConn(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	postID, err := parseIDParam(c, "id")
+	if err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	if err := h.AuthService.ToggleConn(uid, postID); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
+}
+func (h *Handler) GetConn(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize > 50 {
+		pageSize = 50
+	}
+	posts, err := h.AuthService.GetConn(uid, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return

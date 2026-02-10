@@ -1,6 +1,10 @@
 package model
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // 评论
 type Comment struct {
@@ -23,7 +27,7 @@ type Post struct {
 	AuthorID uint   `gorm:"not null;index:idx_author;comment:作者ID" json:"authorID"`
 	Status   int    `gorm:"type:tinyint;not null;default:1;comment:状态(0:草稿,1:已发布,2:已删除)" json:"status"`
 
-	Hotscore float64   `gorm:"type:float;default:0;comment:热度分数" json:"hotscore"`
+	Hotscore float64   `gorm:"type:float;default:0;comment:热度分数" json:"hot_score"`
 	Author   User      `gorm:"foreignKey:AuthorID" json:"author,omitempty"`
 	Comments []Comment `gorm:"foreignKey:postID" json:"comments,omitempty"`
 }
@@ -58,4 +62,12 @@ type Like struct {
 	Type     int  `gorm:"type:tinyint;not null;comment:类型(1:点赞,2:收藏)" json:"type"`
 
 	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+
+// 收藏
+type Connection struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    uint      `gorm:"index;not null"`
+	PostID    uint      `gorm:"index;not null"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
 }

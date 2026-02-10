@@ -48,6 +48,24 @@ func AuthMiddleware() gin.HandlerFunc {
 		if claims, ok := token.Claims.(*Claims); ok {
 			c.Set("user_id", claims.ID)
 			c.Set("username", claims.Username)
+			c.Set("role", claims.Role)
+		}
+		c.Next()
+	}
+}
+
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "无法获取用户角色"})
+			c.Abort()
+			return
+		}
+		if role != "2" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，仅管理员可操作"})
+			c.Abort()
+			return
 		}
 		c.Next()
 	}
