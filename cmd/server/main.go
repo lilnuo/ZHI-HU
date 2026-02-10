@@ -42,7 +42,8 @@ func main() {
 		repos.Comment,
 		repos.User,
 		rdb,
-		config.Setting.JWT.Secret)
+		config.Setting.JWT.Secret,
+		repos.Connection)
 	httpHandler := handler.NewUserHandler(socialService)
 	r := gin.Default()
 	r.Use(middleware.CustomRecovery())
