@@ -59,7 +59,7 @@ type Like struct {
 	gorm.Model
 	UserID   uint `gorm:"not null;index:idx_user;comment:用户ID" json:"user_id"`
 	TargetID uint `gorm:"not null;index:idx_target;comment:目标对象ID(文章ID或评论ID)" json:"target_id"`
-	Type     int  `gorm:"type:tinyint;not null;comment:类型(1:点赞,2:收藏)" json:"type"`
+	Type     int  `gorm:"type:tinyint;not null;comment:类型(1:问题/文章,2:评论)" json:"type"`
 
 	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }

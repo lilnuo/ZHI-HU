@@ -290,24 +290,6 @@ func (h *Handler) UnFollowUser(c *gin.Context) {
 	e.SuccessResponse(c, nil)
 }
 
-func (h *Handler) ToggleLike(c *gin.Context) {
-	uid, ok := getUserID(c)
-	if !ok {
-		return
-	}
-	targetID, err := parseIDParam(c, "id")
-	if err != nil {
-		e.ErrorResponse(c, e.ErrInvalidArgs)
-		return
-	}
-	const likeType = 1
-	if err := h.AuthService.ToggleLike(uid, targetID, likeType); err != nil {
-		e.ErrorResponse(c, err)
-		return
-	}
-	e.SuccessResponse(c, nil)
-}
-
 type AddCommentRequest struct {
 	Content string `json:"content" binding:"required"`
 }
@@ -486,4 +468,27 @@ func (h *Handler) GetConn(c *gin.Context) {
 		return
 	}
 	e.SuccessResponse(c, posts)
+}
+
+// 点赞请求结构体，分清楚类型
+type ToggleLikeRequest struct {
+	TargetID uint `json:"target_id" binding:"required"`
+	Type     int  `json:"type" binding:"required,oneof=1 2"` //1:文章/问题·,2:评论
+}
+
+func (h *Handler) ToggleLike(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	var req ToggleLikeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	if err := h.AuthService.ToggleLike(uid, req.TargetID, req.Type); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
 }

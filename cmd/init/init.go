@@ -42,7 +42,7 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler) {
 		writerGroup.POST("/connection/:id", httpHandler.ToggleConn)
 		writerGroup.POST("/connections", httpHandler.GetConn)
 		//点赞文章
-		writerGroup.POST("/like/:post_id", httpHandler.ToggleLike)
+		writerGroup.POST("/like", httpHandler.ToggleLike)
 		//comment
 		writerGroup.GET("/posts/comments", httpHandler.GetComments)
 		writerGroup.POST("/posts/:post_id/comments", httpHandler.AddComment)

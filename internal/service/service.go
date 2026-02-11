@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"go-zhihu/config"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type SocialService struct {
@@ -233,11 +235,11 @@ func (s *SocialService) FollowUser(followerID, followeeID uint) error {
 	if followerID == followeeID {
 		return e.ErrSelfAction
 	}
-	isFollowing, _ := s.RelationRepo.IsFollowing(followerID, followeeID)
-	if isFollowing {
-		return e.ErrAlreadyFollowing
-	}
-	if err := s.RelationRepo.Follow(followerID, followeeID); err != nil {
+	err := s.RelationRepo.Follow(followerID, followeeID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return e.ErrAlreadyFollowing
+		}
 		return e.ErrServer
 	}
 	return nil
@@ -250,31 +252,47 @@ func (s *SocialService) UnfollowUser(followerID, followeeID uint) error {
 }
 
 func (s *SocialService) ToggleLike(userID uint, targetID uint, targetType int) error {
-	post, err := s.PostRepo.FindPostByID(targetID)
-	if err != nil {
-		return e.ErrPostNotFound
-	}
-	targetType = post.Type
-	hasLiked, err := s.LikeRepo.IsLike(userID, targetID, targetType)
-	if err != nil {
-		return e.ErrServer
-	}
-	if hasLiked {
-		if err := s.LikeRepo.RemoveLike(userID, targetID, post.Type); err != nil {
+	if targetType == 1 {
+		post, err := s.PostRepo.FindPostByID(targetID)
+		if err != nil {
+			return e.ErrPostNotFound
+		}
+		hasLiked, err := s.LikeRepo.IsLike(userID, targetID, targetType)
+		if err != nil {
 			return e.ErrServer
 		}
-		newScore := post.Hotscore - 10
-		if newScore < 0 {
-			newScore = 0
+		if hasLiked {
+			if err := s.LikeRepo.RemoveLike(userID, targetID, post.Type); err != nil {
+				return e.ErrServer
+			}
+			newScore := post.Hotscore - 10
+			if newScore < 0 {
+				newScore = 0
+			}
+			return s.PostRepo.UpdateHotScore(targetID, newScore)
 		}
+		like := &model.Like{UserID: userID, TargetID: targetID, Type: targetType}
+		if err := s.LikeRepo.AddLike(like); err != nil {
+			return e.ErrServer
+		}
+		newScore := post.Hotscore + 10
 		return s.PostRepo.UpdateHotScore(targetID, newScore)
+	} else if targetID == 2 {
+		_, err := s.CommentRepo.FindCommentByID(targetID)
+		if err != nil {
+			return e.ErrInvalidArgs //error comment not found
+		}
+		hasLiked, err := s.LikeRepo.IsLike(userID, targetID, targetType)
+		if err != nil {
+			return e.ErrServer
+		}
+		if hasLiked {
+			return s.LikeRepo.RemoveLike(userID, targetID, targetType)
+		}
+		like := &model.Like{UserID: userID, TargetID: targetID, Type: targetType}
+		return s.LikeRepo.AddLike(like)
 	}
-	like := &model.Like{UserID: userID, TargetID: targetID, Type: targetType}
-	if err := s.LikeRepo.AddLike(like); err != nil {
-		return e.ErrServer
-	}
-	newScore := post.Hotscore + 10
-	return s.PostRepo.UpdateHotScore(targetID, newScore)
+	return e.ErrInvalidArgs
 }
 func (s *SocialService) AddComment(postID, authorID uint, content string) error {
 	comment := &model.Comment{

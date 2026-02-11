@@ -278,3 +278,11 @@ func (r *ConnectRepository) GetConnByUser(userID uint, offset, limit int) ([]mod
 	err := r.DB.Table("posts").Joins("JOIN connections ON posts.id =connections.post_id").Where("connections.user_id=?", userID).Order("connections.created_at DESC").Offset(offset).Limit(limit).Error
 	return posts, err
 }
+func (r *CommentRepository) FindCommentByID(id uint) (*model.Comment, error) {
+	var comment model.Comment
+	err := r.DB.First(&comment, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &comment, nil
+}
