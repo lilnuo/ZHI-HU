@@ -492,3 +492,133 @@ func (h *Handler) ToggleLike(c *gin.Context) {
 	}
 	e.SuccessResponse(c, nil)
 }
+
+// 获取通知列表
+func (h *Handler) GetNotifications(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+	list, err := h.AuthService.GetNotifications(uid, page, pageSize)
+	if err != nil {
+		e.ErrorResponse(c, e.ErrServer)
+		return
+	}
+	e.SuccessResponse(c, list)
+}
+
+// 红标数量
+func (h *Handler) GetUnreadCount(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	count, err := h.AuthService.GetUnreadCount(uid)
+	if err != nil {
+		e.ErrorResponse(c, e.ErrServer)
+		return
+	}
+	e.SuccessResponse(c, gin.H{"unread_count": count})
+}
+
+// 单条已读
+func (h *Handler) MarkNotificationRead(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	id, err := parseIDParam(c, "id")
+	if err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	if err := h.AuthService.MarkNotificationRead(id, uid); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
+}
+func (h *Handler) MarkAllRead(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	if err := h.AuthService.MarkAllNotificationsRead(uid); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
+}
+
+// 私信通知
+type SendMsgRequest struct {
+	ReceiverID uint   `json:"receiver_id" binding:"required"`
+	Content    string `json:"content" binding:"required,min=1"`
+}
+
+func (h *Handler) SendMsg(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	var req SendMsgRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	if err := h.AuthService.SendMessage(uid, req.ReceiverID, req.Content); err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, nil)
+} //聊天记录
+func (h *Handler) GetChatHistory(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	peerIDStr := c.Param("id")
+	peerID, err := strconv.ParseUint(peerIDStr, 10, 32)
+	if err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	} //换个样子
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	history, err := h.AuthService.GetChatHistory(uid, uint(peerID), page, pageSize)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, history)
+}
+
+// 会话列表
+func (h *Handler) GetConversations(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	list, err := h.AuthService.GetConversations(uid)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, list)
+}
+func (h *Handler) GetTotalUnread(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	counts, err := h.AuthService.GetConversations(uid)
+	if err != nil {
+		e.ErrorResponse(c, e.ErrServer)
+		return
+	}
+	e.SuccessResponse(c, counts)
+}

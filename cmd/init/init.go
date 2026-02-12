@@ -48,6 +48,16 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler) {
 		writerGroup.POST("/posts/:post_id/comments", httpHandler.AddComment)
 		//feed
 		authGroup.GET("/feed", httpHandler.GetFeed)
+		//通知中心
+		writerGroup.GET("/notifications", httpHandler.GetNotifications)
+		writerGroup.GET("/notifications/unread", httpHandler.GetUnreadCount)
+		writerGroup.PUT("/notifications/read/:id", httpHandler.MarkNotificationRead)
+		writerGroup.PUT("/notifications/read/read_all", httpHandler.MarkAllRead)
+		//私信
+		writerGroup.POST("/messages", httpHandler.SendMsg)
+		writerGroup.GET("/messages/conversations", httpHandler.GetConversations)
+		writerGroup.GET("/messages/unread", httpHandler.GetTotalUnread)
+		writerGroup.GET("messages/:id", httpHandler.GetChatHistory)
 		//administer
 		adminGroup := authGroup.Group("/")
 		adminGroup.Use(middleware.AdminMiddleware())

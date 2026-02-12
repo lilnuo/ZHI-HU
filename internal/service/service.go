@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"go-zhihu/config"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
@@ -16,33 +17,38 @@ import (
 )
 
 type SocialService struct {
-	RelationRepo   *repository.RelationRepository
-	LikeRepo       *repository.LikeRepository
-	PostRepo       *repository.PostRepository
-	FeedRepo       *repository.FeedRepository
-	CommentRepo    *repository.CommentRepository
-	UserRepo       *repository.UserRepository
-	ConnectionRepo *repository.ConnectRepository
-	rdb            *redis.Client
-	secret         string
+	RelationRepo     *repository.RelationRepository
+	LikeRepo         *repository.LikeRepository
+	PostRepo         *repository.PostRepository
+	FeedRepo         *repository.FeedRepository
+	CommentRepo      *repository.CommentRepository
+	UserRepo         *repository.UserRepository
+	ConnectionRepo   *repository.ConnectRepository
+	NotificationRepo *repository.NotificationRepository
+	MessageRepo      *repository.MessageRepository
+	rdb              *redis.Client
+	secret           string
 }
 
 func NewUserService(relationRepo *repository.RelationRepository,
 	likeRepo *repository.LikeRepository, postRepo *repository.PostRepository,
 	feedRepo *repository.FeedRepository, commentRepo *repository.CommentRepository,
-	userRepo *repository.UserRepository,
+	userRepo *repository.UserRepository, notificationRepo *repository.NotificationRepository,
+	messageRepo *repository.MessageRepository,
 	rdb *redis.Client, jwtSecret string,
 	connectionRepo *repository.ConnectRepository) *SocialService {
 	return &SocialService{
-		RelationRepo:   relationRepo,
-		LikeRepo:       likeRepo,
-		PostRepo:       postRepo,
-		FeedRepo:       feedRepo,
-		CommentRepo:    commentRepo,
-		UserRepo:       userRepo,
-		ConnectionRepo: connectionRepo,
-		rdb:            rdb,
-		secret:         jwtSecret,
+		RelationRepo:     relationRepo,
+		LikeRepo:         likeRepo,
+		PostRepo:         postRepo,
+		FeedRepo:         feedRepo,
+		CommentRepo:      commentRepo,
+		UserRepo:         userRepo,
+		ConnectionRepo:   connectionRepo,
+		NotificationRepo: notificationRepo,
+		MessageRepo:      messageRepo,
+		rdb:              rdb,
+		secret:           jwtSecret,
 	}
 }
 
@@ -240,6 +246,7 @@ func (s *SocialService) FollowUser(followerID, followeeID uint) error {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return e.ErrAlreadyFollowing
 		}
+		s.sendNotification(followeeID, followerID, model.NotifyTypeFollow, "关注了你", 0)
 		return e.ErrServer
 	}
 	return nil
@@ -276,6 +283,7 @@ func (s *SocialService) ToggleLike(userID uint, targetID uint, targetType int) e
 			return e.ErrServer
 		}
 		newScore := post.Hotscore + 10
+		s.sendNotification(post.AuthorID, userID, model.NotifyTypeLike, "赞了你的文章", targetID)
 		return s.PostRepo.UpdateHotScore(targetID, newScore)
 	} else if targetID == 2 {
 		_, err := s.CommentRepo.FindCommentByID(targetID)
@@ -308,6 +316,7 @@ func (s *SocialService) AddComment(postID, authorID uint, content string) error 
 	if post != nil {
 		newScore := post.Hotscore + 5
 		_ = s.PostRepo.UpdateHotScore(postID, newScore)
+		s.sendNotification(post.AuthorID, authorID, model.NotifyTypeComment, "评论了你的文章", postID)
 	}
 	return nil
 }
@@ -349,6 +358,7 @@ func (s *SocialService) BanUser(id uint) error {
 	if err := s.UserRepo.BanUser(id); err != nil {
 		return e.ErrServer
 	}
+	_ = s.SendSystemNotice(id, "已被封禁")
 	return nil
 
 }
@@ -390,8 +400,111 @@ func (s *SocialService) ToggleConn(userID, postID uint) error {
 	return s.ConnectionRepo.AddConnection(userID, postID)
 }
 
-// 获取列表
+// 获取收藏列表
 func (s *SocialService) GetConn(userID uint, page, pageSze int) ([]model.Post, error) {
 	offset := (page - 1) * pageSze
 	return s.ConnectionRepo.GetConnByUser(userID, offset, pageSze)
+}
+
+// 信息通知
+func (s *SocialService) sendNotification(recipientID, actorID uint, nType int, content string, targetID uint) {
+	if recipientID == actorID {
+		return
+	}
+	notification := &model.Notification{
+		RecipientID: recipientID,
+		ActorID:     actorID,
+		Type:        nType,
+		Content:     content,
+		TargetID:    targetID,
+		IsRead:      false,
+	}
+	_ = s.NotificationRepo.CreateNotification(notification)
+}
+func (s *SocialService) GetNotifications(userID uint, page, pageSize int) ([]model.Notification, error) {
+	offset := (page - 1) * pageSize
+	return s.NotificationRepo.GetNotifications(userID, offset, pageSize)
+}
+func (s *SocialService) GetUnreadCount(userID uint) (int64, error) {
+	return s.NotificationRepo.GetUnreadCount(userID)
+}
+func (s *SocialService) MarkNotificationRead(notificationID, userID uint) error {
+	return s.NotificationRepo.MarkAsRead(notificationID, userID)
+}
+func (s *SocialService) MarkAllNotificationsRead(userID uint) error {
+	return s.NotificationRepo.MarkAllAsRead(userID)
+}
+
+// 私信通知（但没有系统通知）
+func generateSessionID(uid1, uid2 uint) string {
+	if uid1 < uid2 {
+		return fmt.Sprintf("%d_%d", uid1, uid2)
+	}
+	return fmt.Sprintf("%d_%d", uid2, uid1)
+}
+func (s *SocialService) SendMessage(senderID, receiverID uint, content string) error {
+	if senderID == receiverID {
+		return e.ErrSelfAction
+	}
+	//可以写好友状态，看是否可以发私信
+	sessionID := generateSessionID(senderID, receiverID)
+	msg := &model.Message{
+		SenderID:   senderID,
+		ReceiverID: receiverID,
+		Content:    content,
+		Session:    sessionID,
+		IsRead:     false,
+	}
+	if err := s.MessageRepo.CreateMessage(msg); err != nil {
+		return e.ErrServer
+	}
+	s.sendNotification(receiverID, senderID, model.NotifyTypeMessage, "给你发来一条私信", 0)
+	return nil
+}
+
+// 获取聊天记录
+func (s *SocialService) GetChatHistory(userID, peerID uint, page, pageSize int) ([]model.Message, error) {
+	sessionID := generateSessionID(userID, peerID)
+	offset := (page - 1) * pageSize
+	messages, err := s.MessageRepo.GetMessageBySession(sessionID, offset, pageSize)
+	if err != nil {
+		return nil, e.ErrServer
+	}
+	_ = s.MessageRepo.MarkMessagesAsRead(sessionID, userID)
+	return messages, nil
+}
+
+// 获取会话列表
+func (s *SocialService) GetConversations(userID uint) ([]model.Message, error) {
+	return s.MessageRepo.GetConversations(userID)
+}
+
+// total Unread
+func (s *SocialService) GetTotalUnread(userID uint) (map[string]int64, error) {
+	notifyCount, err := s.NotificationRepo.GetUnreadCount(userID)
+	if err != nil {
+		notifyCount = 0
+	}
+	msgCount, err := s.MessageRepo.GetUnreadCountByUser(userID)
+	if err != nil {
+		msgCount = 0
+	}
+	return map[string]int64{
+		"notification_unread": notifyCount,
+		"message_unread":      msgCount,
+		"total_unread":        notifyCount + msgCount,
+	}, nil
+}
+
+// 系统通知
+func (s *SocialService) SendSystemNotice(recipientID uint, content string) error {
+	notification := &model.Notification{
+		RecipientID: recipientID,
+		ActorID:     0,
+		Type:        model.NotifyTypeSystem,
+		Content:     content,
+		TargetID:    0,
+		IsRead:      false,
+	}
+	return s.NotificationRepo.CreateNotification(notification)
 }

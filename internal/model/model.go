@@ -71,3 +71,38 @@ type Connection struct {
 	PostID    uint      `gorm:"index;not null"`
 	CreatedAt time.Time `gorm:"autoCreateTime"`
 }
+
+// 通知模型
+type Notification struct {
+	gorm.Model
+	RecipientID uint   `gorm:"not null;index;comment:接受者ID" json:"recipient_id"`
+	ActorID     uint   `gorm:"not null;comment:触发者ID" json:"actor_id"`
+	Type        int    `gorm:"not null;comment:类型(1:点赞,2:评论,3:关注,4:系统)" json:"type"`
+	Content     string `gorm:"type:varchar(255);comment:通知内容" json:"content"`
+	TargetID    uint   `gorm:"comment:关联对象ID(如文章ID)" json:"target_id"`
+	IsRead      bool   `gorm:"default:false;comment:是否已读" json:"is_read"`
+	Actor       User   `gorm:"foreignKey:ActorID" json:"actor"`
+	Recipient   User   `gorm:"foreignKey:RecipientID" json:"-"`
+}
+
+const (
+	NotifyTypeLike    = 1
+	NotifyTypeComment = 2
+	NotifyTypeFollow  = 3
+	NotifyTypeSystem  = 4
+	NotifyType        = 5
+	NotifyTypeMessage = 6
+)
+
+// 私信模型
+type Message struct {
+	gorm.Model
+	SenderID   uint   `gorm:"not null;index;comment:发送者ID" json:"sender_id"`
+	ReceiverID uint   `gorm:"not null;index;comment:接受者ID" json:"receiver_id"`
+	Content    string `gorm:"type:text;not null;comment:消息内容" json:"content"`
+	Session    string `gorm:"index;not null;comment:会话ID(用于分组)" json:"session_id"`
+	IsRead     bool   `gorm:"default:false;comment:是否已读" json:"is_read"`
+
+	Sender   User `gorm:"foreignKey:SenderID" json:"sender"`
+	Receiver User `gorm:"foreignKey:ReceiverID" json:"receiver"`
+}

@@ -286,3 +286,78 @@ func (r *CommentRepository) FindCommentByID(id uint) (*model.Comment, error) {
 	}
 	return &comment, nil
 }
+
+// 信息通知
+type NotificationRepository struct {
+	DB *gorm.DB
+}
+
+func NewNotificationRepository(db *gorm.DB) *NotificationRepository {
+	return &NotificationRepository{DB: db}
+}
+func (r *NotificationRepository) CreateNotification(n *model.Notification) error {
+	return r.DB.Create(n).Error
+}
+func (r *NotificationRepository) GetNotifications(userID uint, offset, limit int) ([]model.Notification, error) {
+	var notifications []model.Notification
+	err := r.DB.Where("recipient_id =?", userID).Preload("Actor").Order("created_at DESC").Offset(offset).Limit(limit).Find(&model.Notification{}).Error
+	return notifications, err
+}
+
+// 红标信息
+func (r *NotificationRepository) GetUnreadCount(userID uint) (int64, error) {
+	var count int64
+	err := r.DB.Model(&model.Notification{}).Where("recipient_id = ? AND is_read=?", userID, false).Count(&count).Error
+	return count, err
+}
+func (r *NotificationRepository) MarkAsRead(notificationID, userID uint) error {
+	return r.DB.Model(&model.Notification{}).Where("id =? AND recipient_id =?", notificationID, userID).Update("is_read", true).Error
+}
+func (r *NotificationRepository) MarkAllAsRead(userID uint) error {
+	return r.DB.Model(&model.Notification{}).Where("recipient_id =? AND is_read= ?", userID, false).Update("is_read", true).Error
+}
+func (r *NotificationRepository) DeleteNotification(id uint) error {
+	return r.DB.Delete(&model.Notification{}, id).Error
+}
+
+// 关注私信
+type MessageRepository struct {
+	DB *gorm.DB
+}
+
+func NewMessageRepository(db *gorm.DB) *MessageRepository {
+	return &MessageRepository{DB: db}
+}
+func (r *MessageRepository) CreateMessage(msg *model.Message) error {
+	return r.DB.Create(msg).Error
+}
+func (r *MessageRepository) GetMessageBySession(sessionID string, offset, limit int) ([]model.Message, error) {
+	var messages []model.Message
+	err := r.DB.Where("session_id = ?", sessionID).Order("created_at ASC").Offset(offset).Limit(limit).Find(&messages).Error
+	return messages, err
+}
+
+// 私信列表
+func (r *MessageRepository) GetConversations(userID uint) ([]model.Message, error) {
+	var messages []model.Message
+	query := `SELECT * FROM messages
+            WHERE id IN (
+                SELECT MAX(id) FROM messages
+                               WHERE sender_id = ? OR receiver_id=?
+                               GROUP BY session_id
+            )
+            ORDER BY created_at DESC 
+            `
+	err := r.DB.Raw(query, userID, userID).Scan(&messages).Error
+	return messages, err
+}
+
+// 私信未读总数
+func (r *MessageRepository) GetUnreadCountByUser(userID uint) (int64, error) {
+	var count int64
+	err := r.DB.Model(&model.Message{}).Where("receiver_id=? AND is_read = ?", userID, false).Count(&count).Error
+	return count, err
+}
+func (r *MessageRepository) MarkMessagesAsRead(sessionID string, receiverID uint) error {
+	return r.DB.Model(&model.Message{}).Where("session_id=? AND receiver_id = ? AND is_read =?", sessionID, receiverID, false).Update("is_read", true).Error
+}

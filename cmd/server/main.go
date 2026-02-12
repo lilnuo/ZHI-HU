@@ -5,6 +5,7 @@ import (
 	"go-zhihu/config"
 	"go-zhihu/internal/handler"
 	"go-zhihu/internal/middleware"
+	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"go-zhihu/internal/service"
 	"log"
@@ -28,6 +29,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Mysql init failed:%v", err)
 	}
+	err = db.AutoMigrate(
+		&model.Notification{},
+		&model.Like{},
+		&model.Comment{},
+		&model.Post{},
+		&model.Connection{},
+		&model.User{},
+		&model.Relation{})
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     config.Setting.Redis.GetAddr(),
 		Password: config.Setting.Redis.Password,
@@ -41,6 +50,7 @@ func main() {
 		repos.Feed,
 		repos.Comment,
 		repos.User,
+		repos.Notification,
 		rdb,
 		config.Setting.JWT.Secret,
 		repos.Connection)
