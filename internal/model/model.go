@@ -39,6 +39,7 @@ type User struct {
 	Password string    `gorm:"type:varchar(128);not null;comment:密码(加盐hash)" json:"-"`
 	Email    string    `gorm:"type:varchar(64);uniqueIndex;comment:邮箱" json:"email"`
 	Avatar   string    `gorm:"type:varchar(255);comment:头像URL" json:"avatar"`
+	Bio      string    `gorm:"varchar(255);comment:头像URL" json:"bio"`
 	Role     int       `gorm:"type:tinyint;default;1;comment:角色(1:普通用户,2:管理员)" json:"role"`
 	Status   int       `gorm:"type:tinyint;default;1;comment;状态(0:禁言,1:正常)" json:"status"`
 	Posts    []Post    `gorm:"foreignKey:AuthorID" json:"posts,omitempty"`

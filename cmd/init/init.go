@@ -26,6 +26,9 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler) {
 		writerGroup.GET("followers", httpHandler.GetFollowers)
 		writerGroup.GET("following", httpHandler.GetFollowees)
 		writerGroup.PUT("profile", httpHandler.UpdateProfile)
+
+		writerGroup.GET("/:id/profile", httpHandler.GetUserProfile)
+		writerGroup.GET("/:id/posts", httpHandler.GetUserPosts)
 		//chapter
 		writerGroup.GET("/posts/drafts", httpHandler.GetDrafts)
 		writerGroup.GET("/posts/posts_lists", httpHandler.GetLatestPosts)

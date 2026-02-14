@@ -1,18 +1,23 @@
 package service
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go-zhihu/config"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"go-zhihu/pkg/e"
+	"log"
+	"math/rand"
 	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -27,6 +32,7 @@ type SocialService struct {
 	NotificationRepo *repository.NotificationRepository
 	MessageRepo      *repository.MessageRepository
 	rdb              *redis.Client
+	sf               singleflight.Group
 	secret           string
 }
 
@@ -50,6 +56,20 @@ func NewUserService(relationRepo *repository.RelationRepository,
 		rdb:              rdb,
 		secret:           jwtSecret,
 	}
+}
+
+const (
+	CacheKeyPostDetail   = "post:detail:%d"
+	CacheNullPlaceholder = "NULL"
+)
+const (
+	FeedKeyPrefix = "feed:user:"
+	FeedPushLimit = 100
+)
+
+// 用随机过期方式来防止缓存雪崩
+func getRandomExpire(base time.Duration) time.Duration {
+	return base + time.Duration(rand.Intn(300))*time.Second
 }
 
 type LoginResponse struct {
@@ -113,12 +133,15 @@ func (s *SocialService) Login(username, password string) (*LoginResponse, error)
 
 // 个人信息的修改
 func (s *SocialService) UpdateProfile(userID uint, avatar, bio string) error {
-	_, err := s.UserRepo.FindUserByID(userID)
-	if err != nil {
-		return e.ErrUserNotFoundInstance
+	updates := make(map[string]interface{})
+	if avatar != "" {
+		updates["avatar"] = avatar
 	}
-	if len(bio) > 500 {
-		return e.ErrInvalidArgs
+	if bio != "" {
+		updates["bio"] = bio
+	}
+	if len(updates) == 0 {
+		return nil
 	}
 	if err := s.UserRepo.UpdateProfile(userID, avatar, bio); err != nil {
 		return e.ErrServer
@@ -143,6 +166,9 @@ func (s *SocialService) CreatePost(authorID uint, title, content string, postTyp
 	if err := s.PostRepo.CreatePost(post); err != nil {
 		return e.ErrServer
 	}
+	if status == 1 {
+		go s.distributePostToFollowers(post)
+	}
 	return nil
 }
 
@@ -162,18 +188,43 @@ func (s *SocialService) GetComments(postID uint) ([]model.Comment, error) {
 	return s.CommentRepo.GetCommentByPostID(postID)
 }
 func (s *SocialService) GetPostDetail(postID uint) (*PostDetailVO, error) {
-	post, err := s.PostRepo.FindPostByID(postID)
-	if err != nil {
-		return nil, e.ErrPostNotFound
+	ctx := context.Background()
+	cacheKey := fmt.Sprintf(CacheKeyPostDetail, postID)
+	val, err := s.rdb.Get(ctx, cacheKey).Result()
+	if err == nil {
+		if val == CacheNullPlaceholder {
+			return nil, e.ErrPostNotFound
+		}
+		var postDetail PostDetailVO
+		if err := json.Unmarshal([]byte(val), &postDetail); err == nil {
+			return &postDetail, nil
+		}
 	}
-	count, err := s.LikeRepo.CountLikes(postID)
-	if err != nil {
-		count = 0
+	if err != nil && !errors.Is(err, redis.Nil) {
+		log.Printf("redis error:%v", err)
 	}
-	return &PostDetailVO{
-		Post:      post,
-		LikeCount: count,
-	}, nil
+	result, err, _ := s.sf.Do(fmt.Sprintf("post:%d", postID), func() (interface{}, error) {
+		post, err := s.PostRepo.FindPostByID(postID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, e.ErrPostNotFound) {
+				s.rdb.Set(ctx, cacheKey, CacheNullPlaceholder, time.Minute)
+				return nil, e.ErrPostNotFound
+			}
+			return nil, err
+		}
+		count, err := s.LikeRepo.CountLikes(postID)
+		postDetail := &PostDetailVO{
+			Post:      post,
+			LikeCount: count,
+		}
+		data, _ := json.Marshal(postDetail)
+		s.rdb.Set(ctx, cacheKey, data, getRandomExpire(30*time.Minute))
+		return postDetail, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*PostDetailVO), nil
 }
 
 // 获取草稿箱
@@ -214,6 +265,7 @@ func (s *SocialService) UpdatePost(postID, authorID uint, title, content string,
 	if err := s.PostRepo.UpdatePost(post); err != nil {
 		return e.ErrServer
 	}
+	s.DeletePostCache(postID)
 	return nil
 }
 func (s *SocialService) DeletePost(postID, authorID uint) error {
@@ -228,7 +280,13 @@ func (s *SocialService) DeletePost(postID, authorID uint) error {
 	if err := s.PostRepo.UpdatePost(post); err != nil {
 		return e.ErrServer
 	}
+	s.DeletePostCache(postID)
 	return nil
+}
+func (s *SocialService) DeletePostCache(postID uint) {
+	ctx := context.Background()
+	cacheKey := fmt.Sprintf(CacheKeyPostDetail, postID)
+	s.rdb.Del(ctx, cacheKey)
 }
 func (s *SocialService) Search(keyword string, page, pageSize int) ([]model.Post, error) {
 	offset := (page - 1) * pageSize
@@ -249,6 +307,15 @@ func (s *SocialService) FollowUser(followerID, followeeID uint) error {
 		s.sendNotification(followeeID, followerID, model.NotifyTypeFollow, "关注了你", 0)
 		return e.ErrServer
 	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("panic in pushPostsToFeed: %v", r)
+			}
+		}()
+		s.pushPostsToFeed(followerID, followeeID)
+	}()
+	s.sendNotification(followeeID, followerID, model.NotifyTypeFollow, "关注了你", 0)
 	return nil
 }
 func (s *SocialService) UnfollowUser(followerID, followeeID uint) error {
@@ -333,6 +400,29 @@ func (s *SocialService) GetFollowees(userID uint, page, pageSize int) ([]model.U
 	return s.RelationRepo.GetFollowees(userID, offset, pageSize)
 }
 func (s *SocialService) GetFeed(userID uint, page, pageSize int) ([]model.Post, error) {
+	ctx := context.Background()
+	key := fmt.Sprintf("%s%d", FeedKeyPrefix, userID)
+	start := int64((page - 1) * pageSize)
+	end := start + int64(pageSize) - 1
+	postIDs, err := s.rdb.ZRevRange(ctx, key, start, end).Result()
+	if err == nil && len(postIDs) > 0 {
+		posts, err := s.PostRepo.FindPostsByIDs(postIDs)
+		if err != nil {
+			return nil, err
+		}
+		postMap := make(map[uint]model.Post)
+		for _, p := range posts {
+			postMap[p.ID] = p
+		}
+		sortedPosts := make([]model.Post, 0, len(postIDs))
+		for _, idStr := range postIDs {
+			id, _ := strconv.ParseUint(idStr, 10, 64)
+			if p, ok := postMap[uint(id)]; ok {
+				sortedPosts = append(sortedPosts, p)
+			}
+		}
+		return sortedPosts, nil
+	}
 	followeeIDs, err := s.RelationRepo.GetFolloweeIDs(userID)
 	if err != nil {
 		return nil, e.ErrServer
@@ -341,11 +431,25 @@ func (s *SocialService) GetFeed(userID uint, page, pageSize int) ([]model.Post, 
 		return []model.Post{}, nil
 	}
 	offset := (page - 1) * pageSize
-	posts, err := s.FeedRepo.GetFeedByUserIDs(followeeIDs, offset, pageSize)
+	return s.FeedRepo.GetFeedByUserIDs(followeeIDs, offset, pageSize)
+}
+
+// 推送feed
+func (s *SocialService) distributePostToFollowers(post *model.Post) {
+	ctx := context.Background()
+	followerIDs, err := s.RelationRepo.GetFollowerIDs(post.AuthorID)
 	if err != nil {
-		return nil, e.ErrServer
+		return
 	}
-	return posts, nil
+	pipe := s.rdb.Pipeline()
+	for _, fid := range followerIDs {
+		key := fmt.Sprintf("%s%d", FeedKeyPrefix, fid)
+		pipe.ZAdd(ctx, key, &redis.Z{
+			Score:  float64(post.CreatedAt.Unix()),
+			Member: post.ID,
+		}) //可以限制用户关注人数
+	}
+	_, _ = pipe.Exec(ctx)
 }
 func (s *SocialService) BanUser(id uint) error {
 	user, err := s.UserRepo.FindUserByID(id)
@@ -507,4 +611,73 @@ func (s *SocialService) SendSystemNotice(recipientID uint, content string) error
 		IsRead:      false,
 	}
 	return s.NotificationRepo.CreateNotification(notification)
+}
+
+// 新增用户公开信息
+type UserProfileVO struct {
+	ID        uint      `json:"id"`
+	Username  string    `json:"username"`
+	Avatar    string    `json:"avatar"`
+	Bio       string    `json:"bio"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// 获取他人公开资料
+func (s *SocialService) GetUserProfile(targetID uint) (*UserProfileVO, error) {
+	ctx := context.Background()
+	cacheKey := fmt.Sprintf("user:profile:%d", targetID)
+	val, err := s.rdb.Get(ctx, cacheKey).Result()
+	if err == nil {
+		if val == "NULL" {
+			return nil, e.ErrUserNotFoundInstance
+		}
+		var profile UserProfileVO
+		if json.Unmarshal([]byte(val), &profile) == nil {
+			return &profile, nil
+		}
+	}
+	user, err := s.UserRepo.FindUserByID(targetID)
+	if err != nil {
+		s.rdb.Set(ctx, cacheKey, "NULL", time.Minute)
+		return nil, e.ErrUserNotFoundInstance
+	}
+	profile := &UserProfileVO{
+		ID:        user.ID,
+		Username:  user.Username,
+		Avatar:    user.Avatar,
+		Bio:       user.Bio,
+		CreatedAt: user.CreatedAt,
+	}
+	data, _ := json.Marshal(profile)
+	s.rdb.Set(ctx, cacheKey, data, getRandomExpire(30*time.Minute))
+	return profile, nil
+}
+
+// 获取文章列表
+func (s *SocialService) GetUserPosts(targetID uint, page, pageSize int) ([]model.Post, error) {
+	offset := (page - 1) * pageSize
+	return s.PostRepo.ListPublicByAuthorID(targetID, offset, pageSize)
+}
+
+// 异步将被关注者的文章推送到关注者的时间线
+func (s *SocialService) pushPostsToFeed(followerID, followeeID uint) {
+	posts, err := s.PostRepo.FindRecentPostIDsByAuthor(followeeID, FeedPushLimit)
+	if err != nil {
+		return
+	}
+	if len(posts) == 0 {
+		return
+	}
+	ctx := context.Background()
+	key := fmt.Sprintf("%s%d", FeedKeyPrefix, followerID)
+
+	pipe := s.rdb.Pipeline()
+	for _, post := range posts {
+		pipe.ZAdd(ctx, key, &redis.Z{
+			Score:  float64(post.CreatedAt.Unix()),
+			Member: post.ID,
+		})
+	}
+	pipe.Expire(ctx, key, time.Hour*24*7)
+	_, _ = pipe.Exec(ctx)
 }

@@ -67,7 +67,7 @@ func (r *PostRepository) CreatePost(post *model.Post) error {
 }
 func (r *PostRepository) FindPostByID(id uint) (*model.Post, error) {
 	var post model.Post
-	err := r.DB.Where("status IN ?", []int{0, 1}).Preload("Author").Preload("Comments.Author").First(&post, id).Error
+	err := r.DB.Where("status IN ?", []int{0, 1}).Preload("Author").First(&post, id).Error
 	if err != nil {
 		return nil, e.ErrInvalidArgs
 	}
@@ -75,6 +75,11 @@ func (r *PostRepository) FindPostByID(id uint) (*model.Post, error) {
 		return nil, e.ErrPostNotFound
 	}
 	return &post, err
+}
+func (r *PostRepository) FindPostsByIDs(ids []string) ([]model.Post, error) {
+	var posts []model.Post
+	err := r.DB.Where("id IN ?", ids).Where("status = ?", 1).Preload("Author").Find(&posts).Error
+	return posts, err
 }
 func (r *PostRepository) UpdateStatus(postID uint, status int) error {
 	return r.DB.Model(&model.Post{}).Where("id = ?", postID).Update("status", status).Error
@@ -91,6 +96,13 @@ func (r *PostRepository) ListPosts(offset, limit int, orderBy string) ([]model.P
 	return posts, err
 }
 
+// 获取指定用户主页
+func (r *PostRepository) ListPublicByAuthorID(authorID uint, offset, limit int) ([]model.Post, error) {
+	var posts []model.Post
+	err := r.DB.Where("author_id = ? AND status = ?", authorID, 1).Preload("Author").Order("created_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
+	return posts, err
+}
+
 // 获取指定用户草稿箱列表
 func (r *PostRepository) ListDrafts(userID uint, offset, limit int) ([]model.Post, error) {
 	var posts []model.Post
@@ -101,7 +113,7 @@ func (r *PostRepository) ListDrafts(userID uint, offset, limit int) ([]model.Pos
 
 // 检查空字符，mysql的match语法不支持空字符
 func cleanFullTextKeyword(keyword string) string {
-	reg := regexp.MustCompile(`[+\-<>()~*@"\\]`)
+	reg := regexp.MustCompile(`[^\p{Han}a-zA-Z0-9\s]`)
 	return reg.ReplaceAllString(keyword, " ")
 }
 func (r *PostRepository) SearchPosts(keyword string, offset, limit int) ([]model.Post, error) {
@@ -113,8 +125,14 @@ func (r *PostRepository) SearchPosts(keyword string, offset, limit int) ([]model
 	if strings.TrimSpace(processedKeyword) == "" {
 		return []model.Post{}, nil
 	}
-	query := `SELECT id,title,created_at FROM posts WHERE MATCH(title,content) AGAINST(? IN BOOLEAN MODE) AND status=1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?`
-	err := r.DB.Raw(query, processedKeyword, limit, offset).Scan(&posts).Error
+	err := r.DB.Model(&model.Post{}).Preload("Author").Where("status=?", 1).Where("MATCH(title,content) AGAINST(? IN NATURAL LANGUAGE MODE)", keyword).Order("created_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
+	return posts, err
+}
+
+// 获取指定用户最近的文章id和创建时间
+func (r *PostRepository) FindRecentPostIDsByAuthor(authorID uint, limit int) ([]model.Post, error) {
+	var posts []model.Post
+	err := r.DB.Model(&model.Post{}).Select("id,created_at").Where("author_id = ? AND status = ?", authorID, 1).Order("created_at DESC").Limit(limit).Find(&posts).Error
 	return posts, err
 }
 
@@ -161,6 +179,11 @@ func (r *RelationRepository) GetFolloweeIDs(userID uint) ([]uint, error) {
 	err := r.DB.Model(&model.Relation{}).Where("follower_id=?", userID).Pluck("followee_id", &ids).Error
 	return ids, err
 }
+func (r *RelationRepository) GetFollowerIDs(userID uint) ([]uint, error) {
+	var ids []uint
+	err := r.DB.Model(&model.Relation{}).Where("followee_id=?", userID).Pluck("follower_id", &ids).Error
+	return ids, err
+}
 func (r *RelationRepository) IsFollowing(followerID, followeeID uint) (bool, error) {
 	var count int64
 	err := r.DB.Model(&model.Relation{}).Where("follower_id=? AND followee_id=?", followerID, followeeID).Count(&count).Error
@@ -170,14 +193,14 @@ func (r *RelationRepository) IsFollowing(followerID, followeeID uint) (bool, err
 // 获取粉丝列表（谁关注了我）
 func (r *RelationRepository) GetFollowers(userID uint, offset, limit int) ([]model.User, error) {
 	var users []model.User
-	err := r.DB.Table("users").Joins("JOIN relations ON user_id = relations.follower_id").Where("relations.followee_id=?", userID).Order("relations.created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
+	err := r.DB.Table("users").Select("users.id,users.username,users.avatar,users.created_at").Joins("JOIN relations ON user_id = relations.follower_id").Where("relations.followee_id=?", userID).Order("relations.created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
 	return users, err
 }
 
 // 获取关注列表
 func (r *RelationRepository) GetFollowees(userID uint, offset, limit int) ([]model.User, error) {
 	var users []model.User
-	err := r.DB.Table("users").Joins("JOIN relations ON users.id = relations.followee_id").Where("relations.follower_id =?", userID).Order("relations.created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
+	err := r.DB.Table("users").Select("users.id,users.username,users.avatar,users.created_at").Joins("JOIN relations ON users.id = relations.followee_id").Where("relations.follower_id =?", userID).Order("relations.created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
 	return users, err
 }
 
@@ -218,6 +241,9 @@ func NewFeedRepository(db *gorm.DB) *FeedRepository {
 // 获取用户动态
 
 func (r *FeedRepository) GetFeedByUserIDs(userIDs []uint, offset, limit int) ([]model.Post, error) {
+	if len(userIDs) == 0 {
+		return []model.Post{}, nil
+	}
 	var posts []model.Post
 	err := r.DB.Where("author_id IN ?", userIDs).Where("status=1").Preload("Author").Order("created_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
 	return posts, err

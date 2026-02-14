@@ -622,3 +622,41 @@ func (h *Handler) GetTotalUnread(c *gin.Context) {
 	}
 	e.SuccessResponse(c, counts)
 }
+
+//获取指定用户基本资料以及公开文章
+
+func (h *Handler) GetUserProfile(c *gin.Context) {
+	targetID, err := parseIDParam(c, "id")
+	if err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	profile, err := h.AuthService.GetUserProfile(targetID)
+	if err != nil {
+		e.ErrorResponse(c, err)
+		return
+	}
+	e.SuccessResponse(c, profile)
+}
+func (h *Handler) GetUserPosts(c *gin.Context) {
+	targetID, err := parseIDParam(c, "id")
+	if err != nil {
+		e.ErrorResponse(c, e.ErrInvalidArgs)
+		return
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize > 50 {
+		pageSize = 50
+	}
+	posts, err := h.AuthService.GetUserPosts(targetID, page, pageSize)
+	if err != nil {
+		e.ErrorResponse(c, e.ErrServer)
+		return
+	}
+	e.SuccessResponse(c, posts)
+
+}
