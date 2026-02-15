@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -18,6 +19,7 @@ import (
 type UserService struct {
 	repo   *repository.UserRepository
 	notify *NotificationService
+	rdb    *redis.Client
 	secret string
 }
 
