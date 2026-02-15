@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"go-zhihu/internal/model"
 	"go-zhihu/pkg/e"
 	"regexp"
@@ -228,6 +229,61 @@ func (r *LikeRepository) IsLike(userID, targetID uint, targetType int) (bool, er
 	var count int64
 	err := r.DB.Model(&model.Like{}).Where("user_id=? AND target_id=? AND type=?", userID, targetID, targetType).Count(&count).Error
 	return count > 0, err
+}
+
+// 事务方法
+func (r *LikeRepository) ToggleLikeWithTx(userID, targetID uint, targetType int) (bool, bool, error) {
+	var isLike bool
+	var isNewAction bool
+	err := r.DB.Transaction(func(tx *gorm.DB) error {
+		var existingLike model.Like
+		err := tx.Where("user_id = ? AND target_id = ? AND type =?", userID, targetID, targetType).First(existingLike).Error
+
+		const likePostScore = 10
+		const likeCommentScore = 5
+		if err == nil {
+			isNewAction = false
+			isLike = false
+			if err := tx.Delete(&existingLike).Error; err != nil {
+				return err
+			}
+			if targetType == 1 {
+				if err := tx.Model(&model.Post{}).Where("id = ?", targetID).Update("hot_score", gorm.Expr("hot_score - ?", likePostScore)).Error; err != nil {
+					return err
+				}
+			} else if targetType == 2 {
+				var comment model.Comment
+				if err := tx.Select("post_id").Where("id = ?", targetID).First(&comment).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		} else if errors.Is(err, gorm.ErrRecordNotFound) {
+			isNewAction = true
+			isLike = true
+			like := &model.Like{UserID: userID, TargetID: targetID, Type: targetType}
+			if err := tx.Create(like).Error; err != nil {
+				return err
+			}
+			if targetType == 1 {
+				if err := tx.Model(&model.Post{}).Where("id = ?", targetID).Update("hot_score + ?", likePostScore).Error; err != nil {
+					return err
+				}
+			} else if targetType == 2 {
+				var comment model.Comment
+				if err := tx.Select("post_id").Where("id = ?", targetID).First(&comment).Error; err != nil {
+					return nil
+				}
+				if err := tx.Model(&model.Post{}).Where("id = ?", comment.PostID).Update("hot_score", gorm.Expr("hot_score+ ?", likeCommentScore)).Error; err != nil {
+					return nil
+				}
+			}
+			return nil
+		}
+		return err
+
+	})
+	return isLike, isNewAction, err
 }
 
 type FeedRepository struct {
