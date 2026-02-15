@@ -94,6 +94,15 @@ const (
 	NotifyType        = 5
 	NotifyTypeMessage = 6
 )
+const (
+	PostStatusDraft     = 0
+	PostStatusPublished = 1
+	PostStatusDeleted   = 2
+)
+const (
+	TargetTypePost    = 1
+	TargetTypeComment = 2
+)
 
 // 私信模型
 type Message struct {

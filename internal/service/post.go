@@ -36,7 +36,7 @@ const (
 
 // 处理内容的发布、更新、获取和删
 
-func (s *PostService) CreatePost(authorID uint, title, content string, postType int, status int) error {
+func (s *PostService) CreatePost(ctx context.Context, tx *gorm.DB, authorID uint, title, content string, postType int, status int) error {
 	if status != 0 && status != 1 {
 		status = 1
 	}
@@ -48,22 +48,22 @@ func (s *PostService) CreatePost(authorID uint, title, content string, postType 
 		Status:   status, //默认发布
 		Hotscore: 0,
 	}
-	if err := s.repo.CreatePost(post); err != nil {
+	if err := s.repo.CreatePost(ctx, tx, post); err != nil {
 		return e.ErrServer
 	}
 	if status == 1 {
-		go s.DistributePostToFollowers(post)
+		go s.DistributePostToFollowers(ctx, tx, post)
 	}
 	return nil
 }
 
 //补充普通的最新文章列表
 
-func (s *PostService) GetLatestPosts(page, pageSize int) ([]model.Post, error) {
+func (s *PostService) GetLatestPosts(ctx context.Context, tx *gorm.DB, page, pageSize int) ([]model.Post, error) {
 	offset := (page - 1) * pageSize
-	return s.repo.ListPosts(offset, pageSize, "created_at")
+	return s.repo.ListPosts(ctx, tx, offset, pageSize, "created_at")
 }
-func (s *PostService) GetPostDetail(postID uint) (*PostDetailVO, error) {
+func (s *PostService) GetPostDetail(ct context.Context, tx *gorm.DB, postID uint) (*PostDetailVO, error) {
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf(CacheKeyPostDetail, postID)
 	val, err := s.rdb.Get(ctx, cacheKey).Result()
@@ -79,8 +79,8 @@ func (s *PostService) GetPostDetail(postID uint) (*PostDetailVO, error) {
 	if err != nil && !errors.Is(err, redis.Nil) {
 		log.Printf("redis error:%v", err)
 	}
-	result, err, _ := s.sf.Do(fmt.Sprintf("post:%d", postID), func() (interface{}, error) {
-		post, err := s.repo.FindPostByID(postID)
+	result, err, _ := s.sf.Do(fmt.Sprintf("post:detail:%d", postID), func() (interface{}, error) {
+		post, err := s.repo.FindPostByID(ct, tx, postID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, e.ErrPostNotFound) {
 				s.rdb.Set(ctx, cacheKey, CacheNullPlaceholder, time.Minute)
@@ -88,7 +88,7 @@ func (s *PostService) GetPostDetail(postID uint) (*PostDetailVO, error) {
 			}
 			return nil, err
 		}
-		count, err := s.likeRepo.CountLikes(postID)
+		count, err := s.likeRepo.CountLikes(ctx, tx, postID)
 		postDetail := &PostDetailVO{
 			Post:      post,
 			LikeCount: count,
@@ -104,14 +104,14 @@ func (s *PostService) GetPostDetail(postID uint) (*PostDetailVO, error) {
 }
 
 // 获取草稿箱
-func (s *PostService) GetDrafts(userID uint, page, pageSize int) ([]model.Post, error) {
+func (s *PostService) GetDrafts(ctx context.Context, tx *gorm.DB, userID uint, page, pageSize int) ([]model.Post, error) {
 	offset := (page - 1) * pageSize
-	return s.repo.ListDrafts(userID, offset, pageSize)
+	return s.repo.ListDrafts(ctx, tx, userID, offset, pageSize)
 }
 
 // 发布草稿箱
-func (s *PostService) PublishPost(postID, authorID uint) error {
-	post, err := s.repo.FindPostByID(postID)
+func (s *PostService) PublishPost(ctx context.Context, tx *gorm.DB, postID, authorID uint) error {
+	post, err := s.repo.FindPostByID(ctx, tx, postID)
 	if err != nil {
 		return e.ErrPostNotFound
 	}
@@ -121,10 +121,10 @@ func (s *PostService) PublishPost(postID, authorID uint) error {
 	if post.Status != 0 {
 		return e.ErrInvalidArgs
 	}
-	return s.repo.UpdateStatus(postID, 1)
+	return s.repo.UpdateStatus(ctx, tx, postID, 1)
 }
-func (s *PostService) UpdatePost(postID, authorID uint, title, content string, status *int) error {
-	post, err := s.repo.FindPostByID(postID)
+func (s *PostService) UpdatePost(ctx context.Context, tx *gorm.DB, postID, authorID uint, title, content string, status *int) error {
+	post, err := s.repo.FindPostByID(ctx, tx, postID)
 	if err != nil {
 		return e.ErrPostNotFound
 	}
@@ -138,11 +138,11 @@ func (s *PostService) UpdatePost(postID, authorID uint, title, content string, s
 			post.Status = *status
 		}
 	}
-	s.DeletePostCache(postID)
+	s.DeletePostCache(ctx, tx, postID)
 	return nil
 }
-func (s *PostService) DeletePost(postID, authorID uint) error {
-	post, err := s.repo.FindPostByID(postID)
+func (s *PostService) DeletePost(ctx context.Context, tx *gorm.DB, postID, authorID uint) error {
+	post, err := s.repo.FindPostByID(ctx, tx, postID)
 	if err != nil {
 		return e.ErrPostNotFound
 	}
@@ -150,29 +150,29 @@ func (s *PostService) DeletePost(postID, authorID uint) error {
 		return e.ErrPermission
 	}
 	post.Status = 2
-	if err := s.repo.UpdatePost(post); err != nil {
+	if err := s.repo.UpdatePost(ctx, tx, post); err != nil {
 		return e.ErrServer
 	}
-	s.DeletePostCache(postID)
+	s.DeletePostCache(ctx, tx, postID)
 	return nil
 }
-func (s *PostService) DeletePostCache(postID uint) {
+func (s *PostService) DeletePostCache(ct context.Context, tx *gorm.DB, postID uint) {
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf(CacheKeyPostDetail, postID)
 	s.rdb.Del(ctx, cacheKey)
 }
-func (s *PostService) Search(keyword string, page, pageSize int) ([]model.Post, error) {
+func (s *PostService) Search(ctx context.Context, tx *gorm.DB, keyword string, page, pageSize int) ([]model.Post, error) {
 	offset := (page - 1) * pageSize
-	return s.repo.SearchPosts(keyword, offset, pageSize)
+	return s.repo.SearchPosts(ctx, tx, keyword, offset, pageSize)
 }
 
 // 获取文章列表
-func (s *PostService) GetUserPosts(targetID uint, page, pageSize int) ([]model.Post, error) {
+func (s *PostService) GetUserPosts(ctx context.Context, tx *gorm.DB, targetID uint, page, pageSize int) ([]model.Post, error) {
 	offset := (page - 1) * pageSize
-	return s.repo.ListPublicByAuthorID(targetID, offset, pageSize)
+	return s.repo.ListPublicByAuthorID(ctx, tx, targetID, offset, pageSize)
 }
 
 // 排行榜补充
-func (s *PostService) GetLeaderboard(limit int) ([]model.Post, error) {
-	return s.repo.GetLeaderboard(limit)
+func (s *PostService) GetLeaderboard(ctx context.Context, tx *gorm.DB, limit int) ([]model.Post, error) {
+	return s.repo.GetLeaderboard(ctx, tx, limit)
 }

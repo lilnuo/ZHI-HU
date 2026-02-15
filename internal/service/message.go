@@ -1,10 +1,13 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"go-zhihu/pkg/e"
+
+	"gorm.io/gorm"
 )
 
 type MessageService struct {
@@ -25,29 +28,29 @@ func generateSessionID(uid1, uid2 uint) string {
 }
 
 // 获取聊天记录
-func (s *MessageService) GetChatHistory(userID, peerID uint, page, pageSize int) ([]model.Message, error) {
+func (s *MessageService) GetChatHistory(ctx context.Context, tx *gorm.DB, userID, peerID uint, page, pageSize int) ([]model.Message, error) {
 	sessionID := generateSessionID(userID, peerID)
 	offset := (page - 1) * pageSize
-	messages, err := s.repo.GetMessageBySession(sessionID, offset, pageSize)
+	messages, err := s.repo.GetMessageBySession(ctx, tx, sessionID, offset, pageSize)
 	if err != nil {
 		return nil, e.ErrServer
 	}
-	_ = s.repo.MarkMessagesAsRead(sessionID, userID)
+	_ = s.repo.MarkMessagesAsRead(ctx, tx, sessionID, userID)
 	return messages, nil
 }
 
 // 获取会话列表
-func (s *MessageService) GetConversations(userID uint) ([]model.Message, error) {
-	return s.repo.GetConversations(userID)
+func (s *MessageService) GetConversations(ctx context.Context, tx *gorm.DB, userID uint) ([]model.Message, error) {
+	return s.repo.GetConversations(ctx, tx, userID)
 }
 
 // total Unread
-func (s *MessageService) GetTotalUnread(userID uint) (map[string]int64, error) {
-	notifyCount, err := s.notify.repo.GetUnreadCount(userID)
+func (s *MessageService) GetTotalUnread(ctx context.Context, tx *gorm.DB, userID uint) (map[string]int64, error) {
+	notifyCount, err := s.notify.repo.GetUnreadCount(ctx, tx, userID)
 	if err != nil {
 		notifyCount = 0
 	}
-	msgCount, err := s.repo.GetUnreadCountByUser(userID)
+	msgCount, err := s.repo.GetUnreadCountByUser(ctx, tx, userID)
 	if err != nil {
 		msgCount = 0
 	}

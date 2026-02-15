@@ -35,7 +35,7 @@ func NewService(db *gorm.DB, rdb *redis.Client, jwtSecret string) *Service {
 	return &Service{
 		User:        NewUserService(userRepo, notifySvc, jwtSecret),
 		Post:        NewPostService(postRepo, likeRepo, feedSvc, rdb),
-		Interaction: NewInteractionService(likeRepo, commentRepo, postRepo, connRepo, notifySvc),
+		Interaction: NewInteractionService(likeRepo, commentRepo, postRepo, connRepo, notifySvc, db),
 		Relation:    NewRelationService(relationRepo, userRepo, feedSvc, notifySvc),
 		Feed:        feedSvc,
 		Message:     NewMessageService(messageRepo, notifySvc),

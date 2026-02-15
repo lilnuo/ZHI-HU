@@ -1,9 +1,12 @@
 package service
 
 import (
+	"context"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"go-zhihu/pkg/e"
+
+	"gorm.io/gorm"
 )
 
 type NotificationService struct {
@@ -15,7 +18,7 @@ func NewNotificationService(repo *repository.NotificationRepository) *Notificati
 }
 
 // 信息通知
-func (s *NotificationService) sendNotification(recipientID, actorID uint, nType int, content string, targetID uint) {
+func (s *NotificationService) sendNotification(ctx context.Context, tx *gorm.DB, recipientID, actorID uint, nType int, content string, targetID uint) {
 	if recipientID == actorID {
 		return
 	}
@@ -27,9 +30,9 @@ func (s *NotificationService) sendNotification(recipientID, actorID uint, nType 
 		TargetID:    targetID,
 		IsRead:      false,
 	}
-	_ = s.repo.CreateNotification(notification)
+	_ = s.repo.CreateNotification(ctx, tx, notification)
 }
-func (s *MessageService) SendMessage(senderID, receiverID uint, content string) error {
+func (s *MessageService) SendMessage(ctx context.Context, tx *gorm.DB, senderID, receiverID uint, content string) error {
 	if senderID == receiverID {
 		return e.ErrSelfAction
 	}
@@ -42,15 +45,15 @@ func (s *MessageService) SendMessage(senderID, receiverID uint, content string) 
 		Session:    sessionID,
 		IsRead:     false,
 	}
-	if err := s.repo.CreateMessage(msg); err != nil {
+	if err := s.repo.CreateMessage(ctx, tx, msg); err != nil {
 		return e.ErrServer
 	}
-	s.notify.sendNotification(receiverID, senderID, model.NotifyTypeMessage, "给你发来一条私信", 0)
+	s.notify.sendNotification(ctx, tx, receiverID, senderID, model.NotifyTypeMessage, "给你发来一条私信", 0)
 	return nil
 }
 
 // 系统通知
-func (s *NotificationService) SendSystemNotice(recipientID uint, content string) error {
+func (s *NotificationService) SendSystemNotice(ctx context.Context, tx *gorm.DB, recipientID uint, content string) error {
 	notification := &model.Notification{
 		RecipientID: recipientID,
 		ActorID:     0,
@@ -59,18 +62,18 @@ func (s *NotificationService) SendSystemNotice(recipientID uint, content string)
 		TargetID:    0,
 		IsRead:      false,
 	}
-	return s.repo.CreateNotification(notification)
+	return s.repo.CreateNotification(ctx, tx, notification)
 }
-func (s *NotificationService) GetNotifications(userID uint, page, pageSize int) ([]model.Notification, error) {
+func (s *NotificationService) GetNotifications(ctx context.Context, tx *gorm.DB, userID uint, page, pageSize int) ([]model.Notification, error) {
 	offset := (page - 1) * pageSize
-	return s.repo.GetNotifications(userID, offset, pageSize)
+	return s.repo.GetNotifications(ctx, tx, userID, offset, pageSize)
 }
-func (s *NotificationService) GetUnreadCount(userID uint) (int64, error) {
-	return s.repo.GetUnreadCount(userID)
+func (s *NotificationService) GetUnreadCount(ctx context.Context, tx *gorm.DB, userID uint) (int64, error) {
+	return s.repo.GetUnreadCount(ctx, tx, userID)
 }
-func (s *NotificationService) MarkNotificationRead(notificationID, userID uint) error {
-	return s.repo.MarkAsRead(notificationID, userID)
+func (s *NotificationService) MarkNotificationRead(ctx context.Context, tx *gorm.DB, notificationID, userID uint) error {
+	return s.repo.MarkAsRead(ctx, tx, notificationID, userID)
 }
-func (s *NotificationService) MarkAllNotificationsRead(userID uint) error {
-	return s.repo.MarkAllAsRead(userID)
+func (s *NotificationService) MarkAllNotificationsRead(ctx context.Context, tx *gorm.DB, userID uint) error {
+	return s.repo.MarkAllAsRead(ctx, tx, userID)
 }

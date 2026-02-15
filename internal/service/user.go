@@ -8,12 +8,14 @@ import (
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"go-zhihu/pkg/e"
+	"log"
 	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type UserService struct {
@@ -32,8 +34,8 @@ type LoginResponse struct {
 	User  *model.User `json:"user"`
 }
 
-func (s *UserService) Register(username, password, email string) error {
-	_, err := s.repo.FindUsername(username)
+func (s *UserService) Register(ctx context.Context, tx *gorm.DB, username, password, email string) error {
+	_, err := s.repo.FindUsername(ctx, tx, username)
 	if err == nil {
 		return e.ErrorUserExist
 	}
@@ -48,7 +50,7 @@ func (s *UserService) Register(username, password, email string) error {
 		Role:     1,
 		Status:   1, //默认正常
 	}
-	if err := s.repo.CreateUser(user); err != nil {
+	if err := s.repo.CreateUser(ctx, tx, user); err != nil {
 		return e.ErrServer
 	}
 	return nil
@@ -65,8 +67,8 @@ func (s *UserService) generateToken(userID uint, username string, role int) (str
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(config.Setting.JWT.Secret))
 }
-func (s *UserService) Login(username, password string) (*LoginResponse, error) {
-	user, err := s.repo.FindUsername(username)
+func (s *UserService) Login(ctx context.Context, tx *gorm.DB, username, password string) (*LoginResponse, error) {
+	user, err := s.repo.FindUsername(ctx, tx, username)
 	if err != nil {
 		return nil, e.ErrUserNotFoundInstance
 	}
@@ -87,7 +89,7 @@ func (s *UserService) Login(username, password string) (*LoginResponse, error) {
 }
 
 // 个人信息的修改
-func (s *UserService) UpdateProfile(userID uint, avatar, bio string) error {
+func (s *UserService) UpdateProfile(ctx context.Context, tx *gorm.DB, userID uint, avatar, bio string) error {
 	updates := make(map[string]interface{})
 	if avatar != "" {
 		updates["avatar"] = avatar
@@ -98,39 +100,43 @@ func (s *UserService) UpdateProfile(userID uint, avatar, bio string) error {
 	if len(updates) == 0 {
 		return nil
 	}
-	if err := s.repo.UpdateProfile(userID, avatar, bio); err != nil {
+	if err := s.repo.UpdateProfile(ctx, tx, userID, avatar, bio); err != nil {
 		return e.ErrServer
+	}
+	cacheKey := fmt.Sprintf("user:profile:%d", userID)
+	if err := s.rdb.Del(ctx, cacheKey).Err(); err != nil {
+		log.Printf("failed to invalidate user cache :%v", err)
 	}
 	return nil
 }
-func (s *UserService) BanUser(id uint) error {
-	user, err := s.repo.FindUserByID(id)
+func (s *UserService) BanUser(ctx context.Context, tx *gorm.DB, id uint) error {
+	user, err := s.repo.FindUserByID(ctx, tx, id)
 	if err != nil {
 		return e.ErrUserNotFoundInstance
 	}
 	if user.Role == 2 {
 		return e.ErrPermission
 	}
-	if err := s.repo.BanUser(id); err != nil {
+	if err := s.repo.BanUser(ctx, tx, id); err != nil {
 		return e.ErrServer
 	}
-	_ = s.notify.SendSystemNotice(id, "已被封禁")
+	_ = s.notify.SendSystemNotice(ctx, tx, id, "已被封禁")
 	return nil
 
 }
-func (s *UserService) UnbanUser(targetID uint) error {
-	targetUser, err := s.repo.FindUserByID(targetID)
+func (s *UserService) UnbanUser(ctx context.Context, tx *gorm.DB, targetID uint) error {
+	targetUser, err := s.repo.FindUserByID(ctx, tx, targetID)
 	if err != nil {
 		return e.ErrUserNotFoundInstance
 	}
 	if targetUser.Status == 1 {
 		return e.ErrUserNormal
 	}
-	return s.repo.UnbanUser(targetID)
+	return s.repo.UnbanUser(ctx, tx, targetID)
 }
 
 // 获取他人公开资料
-func (s *UserService) GetUserProfile(targetID uint) (*UserProfileVO, error) {
+func (s *UserService) GetUserProfile(ct context.Context, tx *gorm.DB, targetID uint) (*UserProfileVO, error) {
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf("user:profile:%d", targetID)
 	val, err := s.rdb.Get(ctx, cacheKey).Result()
@@ -143,7 +149,7 @@ func (s *UserService) GetUserProfile(targetID uint) (*UserProfileVO, error) {
 			return &profile, nil
 		}
 	}
-	user, err := s.repo.FindUserByID(targetID)
+	user, err := s.repo.FindUserByID(ct, tx, targetID)
 	if err != nil {
 		s.rdb.Set(ctx, cacheKey, "NULL", time.Minute)
 		return nil, e.ErrUserNotFoundInstance

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"gorm.io/gorm"
 )
 
 type FeedService struct {
@@ -24,8 +25,8 @@ func NewFeedService(feed *repository.FeedRepository, post *repository.PostReposi
 }
 
 // 异步将被关注者的文章推送到关注者的时间线
-func (s *FeedService) PushPostsToFeed(followerID, followeeID uint) {
-	posts, err := s.postRepo.FindRecentPostIDsByAuthor(followeeID, FeedPushLimit)
+func (s *FeedService) PushPostsToFeed(ct context.Context, tx *gorm.DB, followerID, followeeID uint) {
+	posts, err := s.postRepo.FindRecentPostIDsByAuthor(ct, tx, followeeID, FeedPushLimit)
 	if err != nil {
 		return
 	}
@@ -47,9 +48,9 @@ func (s *FeedService) PushPostsToFeed(followerID, followeeID uint) {
 }
 
 // 推送feed
-func (s *PostService) DistributePostToFollowers(post *model.Post) {
+func (s *PostService) DistributePostToFollowers(ct context.Context, tx *gorm.DB, post *model.Post) {
 	ctx := context.Background()
-	followerIDs, err := s.relation.GetFollowerIDs(post.AuthorID)
+	followerIDs, err := s.relation.GetFollowerIDs(ct, tx, post.AuthorID)
 	if err != nil {
 		return
 	}
@@ -63,14 +64,14 @@ func (s *PostService) DistributePostToFollowers(post *model.Post) {
 	}
 	_, _ = pipe.Exec(ctx)
 }
-func (s *FeedService) GetFeed(userID uint, page, pageSize int) ([]model.Post, error) {
+func (s *FeedService) GetFeed(ct context.Context, tx *gorm.DB, userID uint, page, pageSize int) ([]model.Post, error) {
 	ctx := context.Background()
 	key := fmt.Sprintf("%s%d", FeedKeyPrefix, userID)
 	start := int64((page - 1) * pageSize)
 	end := start + int64(pageSize) - 1
 	postIDs, err := s.rdb.ZRevRange(ctx, key, start, end).Result()
 	if err == nil && len(postIDs) > 0 {
-		posts, err := s.postRepo.FindPostsByIDs(postIDs)
+		posts, err := s.postRepo.FindPostsByIDs(ct, tx, postIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +88,7 @@ func (s *FeedService) GetFeed(userID uint, page, pageSize int) ([]model.Post, er
 		}
 		return sortedPosts, nil
 	}
-	followeeIDs, err := s.relationRepo.GetFolloweeIDs(userID)
+	followeeIDs, err := s.relationRepo.GetFolloweeIDs(ct, tx, userID)
 	if err != nil {
 		return nil, e.ErrServer
 	}
@@ -95,5 +96,5 @@ func (s *FeedService) GetFeed(userID uint, page, pageSize int) ([]model.Post, er
 		return []model.Post{}, nil
 	}
 	offset := (page - 1) * pageSize
-	return s.feedRepo.GetFeedByUserIDs(followeeIDs, offset, pageSize)
+	return s.feedRepo.GetFeedByUserIDs(ct, tx, followeeIDs, offset, pageSize)
 }
