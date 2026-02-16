@@ -11,6 +11,7 @@ import (
 	"log"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
@@ -35,6 +36,18 @@ type LoginResponse struct {
 }
 
 func (s *UserService) Register(ctx context.Context, tx *gorm.DB, username, password, email string) error {
+	if username == "" || password == "" || email == "" {
+		return e.ErrInvalidArgs
+	}
+	if utf8.RuneCountInString(username) < 3 || utf8.RuneCountInString(username) > 32 {
+		return e.ErrInvalidArgs
+	}
+	if len(password) < 6 {
+		return e.ErrInvalidArgs
+	}
+	if !emailRegex.MatchString(email) {
+		return e.ErrInvalidArgs
+	}
 	_, err := s.repo.FindUsername(ctx, tx, username)
 	if err == nil {
 		return e.ErrorUserExist
@@ -90,16 +103,6 @@ func (s *UserService) Login(ctx context.Context, tx *gorm.DB, username, password
 
 // 个人信息的修改
 func (s *UserService) UpdateProfile(ctx context.Context, tx *gorm.DB, userID uint, avatar, bio string) error {
-	updates := make(map[string]interface{})
-	if avatar != "" {
-		updates["avatar"] = avatar
-	}
-	if bio != "" {
-		updates["bio"] = bio
-	}
-	if len(updates) == 0 {
-		return nil
-	}
 	if err := s.repo.UpdateProfile(ctx, tx, userID, avatar, bio); err != nil {
 		return e.ErrServer
 	}

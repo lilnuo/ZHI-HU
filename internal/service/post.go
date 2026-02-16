@@ -10,6 +10,7 @@ import (
 	"go-zhihu/pkg/e"
 	"log"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-redis/redis/v8"
 	"golang.org/x/sync/singleflight"
@@ -37,6 +38,15 @@ const (
 // 处理内容的发布、更新、获取和删
 
 func (s *PostService) CreatePost(ctx context.Context, tx *gorm.DB, authorID uint, title, content string, postType int, status int) error {
+	if utf8.RuneCountInString(title) == 0 || utf8.RuneCountInString(title) > 255 {
+		return e.ErrInvalidArgs
+	}
+	if content == "" {
+		return e.ErrInvalidArgs
+	}
+	if postType != 1 && postType != 2 {
+		return e.ErrInvalidArgs
+	}
 	if status != 0 && status != 1 {
 		status = 1
 	}
@@ -79,28 +89,25 @@ func (s *PostService) GetPostDetail(ct context.Context, tx *gorm.DB, postID uint
 	if err != nil && !errors.Is(err, redis.Nil) {
 		log.Printf("redis error:%v", err)
 	}
-	result, err, _ := s.sf.Do(fmt.Sprintf("post:detail:%d", postID), func() (interface{}, error) {
-		post, err := s.repo.FindPostByID(ct, tx, postID)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, e.ErrPostNotFound) {
-				s.rdb.Set(ctx, cacheKey, CacheNullPlaceholder, time.Minute)
-				return nil, e.ErrPostNotFound
-			}
-			return nil, err
+	post, err := s.repo.FindPostByID(ct, tx, postID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, e.ErrPostNotFound) {
+			s.rdb.Set(ctx, cacheKey, CacheNullPlaceholder, time.Minute)
+			return nil, e.ErrPostNotFound
 		}
-		count, err := s.likeRepo.CountLikes(ctx, tx, postID)
-		postDetail := &PostDetailVO{
-			Post:      post,
-			LikeCount: count,
-		}
-		data, _ := json.Marshal(postDetail)
-		s.rdb.Set(ctx, cacheKey, data, getRandomExpire(30*time.Minute))
-		return postDetail, nil
-	})
+		return nil, e.ErrServer
+	}
+	count, err := s.likeRepo.CountLikes(ctx, tx, postID)
+	postDetail := &PostDetailVO{
+		Post:      post,
+		LikeCount: count,
+	}
+	data, _ := json.Marshal(postDetail)
+	s.rdb.Set(ctx, cacheKey, data, getRandomExpire(30*time.Minute))
 	if err != nil {
 		return nil, err
 	}
-	return result.(*PostDetailVO), nil
+	return &PostDetailVO{Post: post}, nil
 }
 
 // 获取草稿箱

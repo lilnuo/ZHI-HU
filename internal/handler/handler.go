@@ -6,14 +6,16 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type Handler struct {
-	AuthService *service.SocialService
+	Service *service.Service
+	db      *gorm.DB
 }
 
-func NewUserHandler(authService *service.SocialService) *Handler {
-	return &Handler{AuthService: authService}
+func NewHandler(Service *service.Service, db *gorm.DB) *Handler {
+	return &Handler{Service: Service, db: db}
 }
 
 type RegisterReq struct {
@@ -56,24 +58,28 @@ func parseIDParam(c *gin.Context, paramKey string) (uint, error) {
 
 // 注册与登陆
 func (h *Handler) Register(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	var req RegisterReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.Register(req.Username, req.Password, req.Email); err != nil {
+	if err := h.Service.User.Register(ctx, tx, req.Username, req.Password, req.Email); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, e.ErrSuccess)
 }
 func (h *Handler) Login(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	var req LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	resp, err := h.AuthService.Login(req.Username, req.Password)
+	resp, err := h.Service.User.Login(ctx, tx, req.Username, req.Password)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -83,6 +89,8 @@ func (h *Handler) Login(c *gin.Context) {
 
 // 更新个人信息
 func (h *Handler) UpdateProfile(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -92,7 +100,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.UpdateProfile(uid, req.Avatar, req.Bio); err != nil {
+	if err := h.Service.User.UpdateProfile(ctx, tx, uid, req.Avatar, req.Bio); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -108,6 +116,8 @@ type CreatePostRequest struct {
 }
 
 func (h *Handler) CreatPost(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -117,7 +127,7 @@ func (h *Handler) CreatPost(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.CreatePost(uid, req.Title, req.Content, req.Type, req.Status); err != nil {
+	if err := h.Service.Post.CreatePost(ctx, tx, uid, req.Title, req.Content, req.Type, req.Status); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -126,6 +136,8 @@ func (h *Handler) CreatPost(c *gin.Context) {
 
 // 获取草稿箱列表
 func (h *Handler) GetDrafts(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -140,7 +152,7 @@ func (h *Handler) GetDrafts(c *gin.Context) {
 	if pageSize > 50 {
 		pageSize = 50
 	}
-	drafts, err := h.AuthService.GetDrafts(uid, page, pageSize)
+	drafts, err := h.Service.Post.GetDrafts(ctx, tx, uid, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, e.ErrServer)
 		return
@@ -150,11 +162,13 @@ func (h *Handler) GetDrafts(c *gin.Context) {
 
 // 获取最新文章列表
 func (h *Handler) GetLatestPosts(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	pageStr := c.DefaultQuery("page", "1")
 	pageSizeStr := c.DefaultQuery("page_size", "10")
 	page, _ := strconv.Atoi(pageStr)
 	pageSize, _ := strconv.Atoi(pageSizeStr)
-	posts, err := h.AuthService.GetLatestPosts(page, pageSize)
+	posts, err := h.Service.Post.GetLatestPosts(ctx, tx, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -164,12 +178,14 @@ func (h *Handler) GetLatestPosts(c *gin.Context) {
 
 // 看评论
 func (h *Handler) GetComments(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	postID, err := parseIDParam(c, "post_id")
 	if err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	comments, err := h.AuthService.GetComments(postID)
+	comments, err := h.Service.Interaction.GetComments(ctx, tx, postID)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -178,12 +194,14 @@ func (h *Handler) GetComments(c *gin.Context) {
 }
 
 func (h *Handler) GetPostDetail(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	postID, err := parseIDParam(c, "id")
 	if err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	post, err := h.AuthService.GetPostDetail(postID)
+	post, err := h.Service.Post.GetPostDetail(ctx, tx, postID)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -191,6 +209,8 @@ func (h *Handler) GetPostDetail(c *gin.Context) {
 	e.SuccessResponse(c, post)
 }
 func (h *Handler) UpdatePost(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -204,7 +224,7 @@ func (h *Handler) UpdatePost(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 	}
-	if err := h.AuthService.UpdatePost(postID, uid, req.Title, req.Content, &req.Status); err != nil {
+	if err := h.Service.Post.UpdatePost(ctx, tx, postID, uid, req.Title, req.Content, &req.Status); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -213,6 +233,8 @@ func (h *Handler) UpdatePost(c *gin.Context) {
 
 // 发布草稿
 func (h *Handler) PublishPost(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -222,13 +244,15 @@ func (h *Handler) PublishPost(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.PublishPost(postID, uid); err != nil {
+	if err := h.Service.Post.PublishPost(ctx, tx, postID, uid); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, nil)
 }
 func (h *Handler) DeletePost(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -238,19 +262,21 @@ func (h *Handler) DeletePost(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.DeletePost(postID, uid); err != nil {
+	if err := h.Service.Post.DeletePost(ctx, tx, postID, uid); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, nil)
 }
 func (h *Handler) Search(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	keyword := c.DefaultQuery("keyword", "")
 	pageStr := c.DefaultQuery("page", "1")
 	pageSizeStr := c.DefaultQuery("page_size", "10")
 	page, _ := strconv.Atoi(pageStr)
 	pageSize, _ := strconv.Atoi(pageSizeStr)
-	posts, err := h.AuthService.Search(keyword, page, pageSize)
+	posts, err := h.Service.Post.Search(ctx, tx, keyword, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -258,6 +284,8 @@ func (h *Handler) Search(c *gin.Context) {
 	e.SuccessResponse(c, posts)
 }
 func (h *Handler) FollowUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -266,7 +294,7 @@ func (h *Handler) FollowUser(c *gin.Context) {
 	if err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 	}
-	if err := h.AuthService.FollowUser(uid, targetID); err != nil {
+	if err := h.Service.Relation.FollowUser(ctx, tx, uid, targetID); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -274,6 +302,8 @@ func (h *Handler) FollowUser(c *gin.Context) {
 
 }
 func (h *Handler) UnFollowUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -283,7 +313,7 @@ func (h *Handler) UnFollowUser(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.UnfollowUser(uid, targetID); err != nil {
+	if err := h.Service.Relation.UnfollowUser(ctx, tx, uid, targetID); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -295,6 +325,8 @@ type AddCommentRequest struct {
 }
 
 func (h *Handler) AddComment(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -309,13 +341,15 @@ func (h *Handler) AddComment(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.AddComment(postID, uid, req.Content); err != nil {
+	if err := h.Service.Interaction.AddComment(ctx, tx, postID, uid, req.Content); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, nil)
 }
 func (h *Handler) GetFeed(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -324,7 +358,7 @@ func (h *Handler) GetFeed(c *gin.Context) {
 	pageSizeStr := c.DefaultQuery("page_size", "10")
 	page, _ := strconv.Atoi(pageStr)
 	pageSize, _ := strconv.Atoi(pageSizeStr)
-	posts, err := h.AuthService.GetFeed(uid, page, pageSize)
+	posts, err := h.Service.Feed.GetFeed(ctx, tx, uid, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -332,6 +366,8 @@ func (h *Handler) GetFeed(c *gin.Context) {
 	e.SuccessResponse(c, posts)
 }
 func (h *Handler) BanUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	_, ok := getUserID(c)
 	if !ok {
 		return
@@ -341,7 +377,7 @@ func (h *Handler) BanUser(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.BanUser(targetID); err != nil {
+	if err := h.Service.User.BanUser(ctx, tx, targetID); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -350,6 +386,8 @@ func (h *Handler) BanUser(c *gin.Context) {
 
 // 解禁补充
 func (h *Handler) UnbanUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	_, ok := getUserID(c)
 	if !ok {
 		return
@@ -359,7 +397,7 @@ func (h *Handler) UnbanUser(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.UnbanUser(targetID); err != nil {
+	if err := h.Service.User.UnbanUser(ctx, tx, targetID); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -368,6 +406,8 @@ func (h *Handler) UnbanUser(c *gin.Context) {
 
 // 排行榜补充
 func (h *Handler) GetLeaderboard(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	limitStr := c.DefaultQuery("limit", "10")
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil {
@@ -376,7 +416,7 @@ func (h *Handler) GetLeaderboard(c *gin.Context) {
 	if limit > 100 {
 		limit = 100
 	}
-	posts, err := h.AuthService.GetLeaderboard(limit)
+	posts, err := h.Service.Post.GetLeaderboard(ctx, tx, limit)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -386,6 +426,8 @@ func (h *Handler) GetLeaderboard(c *gin.Context) {
 
 // 获取粉丝或关注列表
 func (h *Handler) GetFollowers(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -400,7 +442,7 @@ func (h *Handler) GetFollowers(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	users, err := h.AuthService.GetFollowers(uid, page, pageSize)
+	users, err := h.Service.Relation.GetFollowers(ctx, tx, uid, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -408,6 +450,8 @@ func (h *Handler) GetFollowers(c *gin.Context) {
 	e.SuccessResponse(c, users)
 }
 func (h *Handler) GetFollowees(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -422,7 +466,7 @@ func (h *Handler) GetFollowees(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	users, err := h.AuthService.GetFollowees(uid, page, pageSize)
+	users, err := h.Service.Relation.GetFollowees(ctx, tx, uid, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -432,6 +476,8 @@ func (h *Handler) GetFollowees(c *gin.Context) {
 
 // 关注收藏文章或问题
 func (h *Handler) ToggleConn(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -441,13 +487,15 @@ func (h *Handler) ToggleConn(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.ToggleConn(uid, postID); err != nil {
+	if err := h.Service.Interaction.ToggleConn(ctx, tx, uid, postID); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, nil)
 }
 func (h *Handler) GetConn(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -462,7 +510,7 @@ func (h *Handler) GetConn(c *gin.Context) {
 	if pageSize > 50 {
 		pageSize = 50
 	}
-	posts, err := h.AuthService.GetConn(uid, page, pageSize)
+	posts, err := h.Service.Interaction.GetConn(ctx, tx, uid, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -477,6 +525,8 @@ type ToggleLikeRequest struct {
 }
 
 func (h *Handler) ToggleLike(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -486,7 +536,7 @@ func (h *Handler) ToggleLike(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.ToggleLike(uid, req.TargetID, req.Type); err != nil {
+	if err := h.Service.Interaction.ToggleLike(ctx, tx, uid, req.TargetID, req.Type); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -495,6 +545,8 @@ func (h *Handler) ToggleLike(c *gin.Context) {
 
 // 获取通知列表
 func (h *Handler) GetNotifications(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -503,7 +555,7 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 	pageSizeStr := c.DefaultQuery("page_size", "10")
 	page, _ := strconv.Atoi(pageStr)
 	pageSize, _ := strconv.Atoi(pageSizeStr)
-	list, err := h.AuthService.GetNotifications(uid, page, pageSize)
+	list, err := h.Service.Notification.GetNotifications(ctx, tx, uid, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, e.ErrServer)
 		return
@@ -513,11 +565,13 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 
 // 红标数量
 func (h *Handler) GetUnreadCount(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
 	}
-	count, err := h.AuthService.GetUnreadCount(uid)
+	count, err := h.Service.Notification.GetUnreadCount(ctx, tx, uid)
 	if err != nil {
 		e.ErrorResponse(c, e.ErrServer)
 		return
@@ -527,6 +581,8 @@ func (h *Handler) GetUnreadCount(c *gin.Context) {
 
 // 单条已读
 func (h *Handler) MarkNotificationRead(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -536,18 +592,20 @@ func (h *Handler) MarkNotificationRead(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.MarkNotificationRead(id, uid); err != nil {
+	if err := h.Service.Notification.MarkNotificationRead(ctx, tx, id, uid); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, nil)
 }
 func (h *Handler) MarkAllRead(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
 	}
-	if err := h.AuthService.MarkAllNotificationsRead(uid); err != nil {
+	if err := h.Service.Notification.MarkAllNotificationsRead(ctx, tx, uid); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
@@ -561,6 +619,8 @@ type SendMsgRequest struct {
 }
 
 func (h *Handler) SendMsg(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -570,13 +630,15 @@ func (h *Handler) SendMsg(c *gin.Context) {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	if err := h.AuthService.SendMessage(uid, req.ReceiverID, req.Content); err != nil {
+	if err := h.Service.Message.SendMessage(ctx, tx, uid, req.ReceiverID, req.Content); err != nil {
 		e.ErrorResponse(c, err)
 		return
 	}
 	e.SuccessResponse(c, nil)
 } //聊天记录
 func (h *Handler) GetChatHistory(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
@@ -589,7 +651,7 @@ func (h *Handler) GetChatHistory(c *gin.Context) {
 	} //换个样子
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	history, err := h.AuthService.GetChatHistory(uid, uint(peerID), page, pageSize)
+	history, err := h.Service.Message.GetChatHistory(ctx, tx, uid, uint(peerID), page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -599,11 +661,13 @@ func (h *Handler) GetChatHistory(c *gin.Context) {
 
 // 会话列表
 func (h *Handler) GetConversations(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
 	}
-	list, err := h.AuthService.GetConversations(uid)
+	list, err := h.Service.Message.GetConversations(ctx, tx, uid)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -611,11 +675,13 @@ func (h *Handler) GetConversations(c *gin.Context) {
 	e.SuccessResponse(c, list)
 }
 func (h *Handler) GetTotalUnread(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	uid, ok := getUserID(c)
 	if !ok {
 		return
 	}
-	counts, err := h.AuthService.GetConversations(uid)
+	counts, err := h.Service.Message.GetTotalUnread(ctx, tx, uid)
 	if err != nil {
 		e.ErrorResponse(c, e.ErrServer)
 		return
@@ -626,12 +692,14 @@ func (h *Handler) GetTotalUnread(c *gin.Context) {
 //获取指定用户基本资料以及公开文章
 
 func (h *Handler) GetUserProfile(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	targetID, err := parseIDParam(c, "id")
 	if err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
 		return
 	}
-	profile, err := h.AuthService.GetUserProfile(targetID)
+	profile, err := h.Service.User.GetUserProfile(ctx, tx, targetID)
 	if err != nil {
 		e.ErrorResponse(c, err)
 		return
@@ -639,6 +707,8 @@ func (h *Handler) GetUserProfile(c *gin.Context) {
 	e.SuccessResponse(c, profile)
 }
 func (h *Handler) GetUserPosts(c *gin.Context) {
+	ctx := c.Request.Context()
+	tx := h.db
 	targetID, err := parseIDParam(c, "id")
 	if err != nil {
 		e.ErrorResponse(c, e.ErrInvalidArgs)
@@ -652,7 +722,7 @@ func (h *Handler) GetUserPosts(c *gin.Context) {
 	if pageSize > 50 {
 		pageSize = 50
 	}
-	posts, err := h.AuthService.GetUserPosts(targetID, page, pageSize)
+	posts, err := h.Service.Post.GetUserPosts(ctx, tx, targetID, page, pageSize)
 	if err != nil {
 		e.ErrorResponse(c, e.ErrServer)
 		return

@@ -36,6 +36,9 @@ func (s *InteractionService) ToggleLike(ctx context.Context, tx *gorm.DB, userID
 	if targetType != model.TargetTypePost && targetType != model.TargetTypeComment {
 		return e.ErrInvalidArgs
 	}
+	var scoreDelta float64
+	var isNewAction bool
+	var authorID uint
 	const (
 		likePostScore    = 10.0
 		likeCommentScore = 5.0
@@ -45,8 +48,6 @@ func (s *InteractionService) ToggleLike(ctx context.Context, tx *gorm.DB, userID
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		var scoreDelta float64
-		var isNewAction bool
 		if existingLike != nil {
 			isNewAction = false
 			if err := s.likeRepo.RemoveLike(ctx, tx, userID, targetID, targetType); err != nil {
@@ -56,17 +57,18 @@ func (s *InteractionService) ToggleLike(ctx context.Context, tx *gorm.DB, userID
 				scoreDelta = -likePostScore
 				if err := s.postRepo.UpdateHotScore(ctx, tx, targetID, scoreDelta); err != nil {
 					return err
-				} else if targetType == model.TargetTypeComment {
-					comment, err := s.commentRepo.FindCommentByID(ctx, tx, targetID)
-					if err != nil {
-						return err
-					}
-					scoreDelta = -likeCommentScore
-					if err := s.postRepo.UpdateHotScore(ctx, tx, comment.PostID, scoreDelta); err != nil {
-						return err
-					}
+				}
+				comment, err := s.commentRepo.FindCommentByID(ctx, tx, targetID)
+				if err != nil {
+					return err
+				}
+				scoreDelta = -likeCommentScore
+				authorID = comment.PostID
+				if err := s.postRepo.UpdateHotScore(ctx, tx, authorID, scoreDelta); err != nil {
+					return err
 				}
 			} else {
+				//新增点赞
 				isNewAction = true
 				like := &model.Like{UserID: userID, TargetID: targetID, Type: targetType}
 				if err := s.likeRepo.AddLike(like, ctx, tx); err != nil {
@@ -74,14 +76,20 @@ func (s *InteractionService) ToggleLike(ctx context.Context, tx *gorm.DB, userID
 				}
 				if targetType == model.TargetTypePost {
 					scoreDelta = likePostScore
+					post, err := s.postRepo.FindPostByID(ctx, tx, targetID)
+					if err != nil {
+						return err
+					}
+					authorID = post.AuthorID
 					if err := s.postRepo.UpdateHotScore(ctx, tx, targetID, scoreDelta); err != nil {
 						return err
 					}
-				} else if targetType == model.TargetTypeComment {
+				} else {
 					comment, err := s.commentRepo.FindCommentByID(ctx, tx, targetID)
 					if err != nil {
 						return err
 					}
+					authorID = comment.AuthorID
 					scoreDelta = likeCommentScore
 					if err := s.postRepo.UpdateHotScore(ctx, tx, comment.PostID, scoreDelta); err != nil {
 						return err
@@ -95,19 +103,12 @@ func (s *InteractionService) ToggleLike(ctx context.Context, tx *gorm.DB, userID
 		return e.ErrServer
 	}
 	//异步发送通知
-	isLikeNow, _ := s.likeRepo.IsLike(ctx, tx, userID, targetID, targetType)
-	if isLikeNow {
-		if targetType == model.TargetTypePost {
-			post, _ := s.postRepo.FindPostByID(ctx, tx, targetID)
-			if post != nil {
-				s.notify.sendNotification(ctx, tx, post.AuthorID, userID, model.NotifyTypeLike, "赞了你的文章", targetID)
-			}
-		} else if targetType == model.TargetTypeComment {
-			comment, _ := s.commentRepo.FindCommentByID(ctx, tx, targetID)
-			if comment != nil {
-				s.notify.sendNotification(ctx, tx, comment.AuthorID, userID, model.NotifyTypeLike, "赞了你的评论", comment.ID)
-			}
+	if isNewAction {
+		content := "赞了你的文章"
+		if targetType == model.TargetTypeComment {
+			content = "赞了你的评论"
 		}
+		s.notify.sendNotification(ctx, tx, authorID, userID, model.NotifyTypeLike, content, targetID)
 	}
 	return nil
 }

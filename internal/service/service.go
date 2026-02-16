@@ -19,26 +19,17 @@ type Service struct {
 	Notification *NotificationService
 }
 
-func NewService(db *gorm.DB, rdb *redis.Client, jwtSecret string) *Service {
-	userRepo := repository.NewUserRepository(db)
-	postRepo := repository.NewPostRepository(db)
-	commentRepo := repository.NewCommentRepository(db)
-	relationRepo := repository.NewRelationRepository(db)
-	likeRepo := repository.NewLikeRepository(db)
-	feedRepo := repository.NewFeedRepository(db)
-	connRepo := repository.NewConnectionRepository(db)
-	notifyRepo := repository.NewNotificationRepository(db)
-	messageRepo := repository.NewMessageRepository(db)
+func NewService(db *gorm.DB, rdb *redis.Client, repos *repository.Repositories, jwtSecret string) *Service {
 
-	notifySvc := NewNotificationService(notifyRepo)
-	feedSvc := NewFeedService(feedRepo, postRepo, relationRepo, rdb)
+	notifySvc := NewNotificationService(repos.Notification)
+	feedSvc := NewFeedService(repos.Feed, repos.Post, repos.Relation, rdb)
 	return &Service{
-		User:        NewUserService(userRepo, notifySvc, jwtSecret),
-		Post:        NewPostService(postRepo, likeRepo, feedSvc, rdb),
-		Interaction: NewInteractionService(likeRepo, commentRepo, postRepo, connRepo, notifySvc, db),
-		Relation:    NewRelationService(relationRepo, userRepo, feedSvc, notifySvc),
+		User:        NewUserService(repos.User, notifySvc, jwtSecret),
+		Post:        NewPostService(repos.Post, repos.Like, feedSvc, rdb),
+		Interaction: NewInteractionService(repos.Like, repos.Comment, repos.Post, repos.Connection, notifySvc, db),
+		Relation:    NewRelationService(repos.Relation, repos.User, feedSvc, notifySvc),
 		Feed:        feedSvc,
-		Message:     NewMessageService(messageRepo, notifySvc),
+		Message:     NewMessageService(repos.Message, notifySvc),
 	}
 }
 

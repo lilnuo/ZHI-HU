@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"go-zhihu/internal/model"
-	"go-zhihu/pkg/e"
 	"regexp"
 	"strings"
 
@@ -94,10 +93,10 @@ func (r *PostRepository) FindPostByID(ctx context.Context, tx *gorm.DB, id uint)
 	var post model.Post
 	err := db.WithContext(ctx).Where("status IN ?", []int{0, 1}).Preload("Author").First(&post, id).Error
 	if err != nil {
-		return nil, e.ErrInvalidArgs
+		return nil, err
 	}
 	if post.Status == 2 {
-		return nil, e.ErrPostNotFound
+		return nil, gorm.ErrRecordNotFound
 	}
 	return &post, err
 }
@@ -131,7 +130,7 @@ func (r *PostRepository) ListPosts(ctx context.Context, tx *gorm.DB, offset, lim
 		db = tx
 	}
 	var posts []model.Post
-	err := db.WithContext(ctx).Where("status=?", 1).Preload("Author").Order(orderBy + " desc").Offset(offset).Limit(limit).Find(&posts).Error
+	err := db.WithContext(ctx).Where("status=?", model.PostStatusPublished).Preload("Author").Order(orderBy + " desc").Offset(offset).Limit(limit).Find(&posts).Error
 	return posts, err
 }
 
@@ -142,7 +141,7 @@ func (r *PostRepository) ListPublicByAuthorID(ctx context.Context, tx *gorm.DB, 
 		db = tx
 	}
 	var posts []model.Post
-	err := db.WithContext(ctx).Where("author_id = ? AND status = ?", authorID, 1).Preload("Author").Order("created_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
+	err := db.WithContext(ctx).Where("author_id = ? AND status = ?", authorID, model.PostStatusPublished).Preload("Author").Order("created_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
 	return posts, err
 }
 
@@ -154,7 +153,7 @@ func (r *PostRepository) ListDrafts(ctx context.Context, tx *gorm.DB, userID uin
 	}
 	var posts []model.Post
 	//降序排列
-	err := db.WithContext(ctx).Where("author_id = ? AND status=?", userID, 0).Order("updated_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
+	err := db.WithContext(ctx).Where("author_id = ? AND status=?", userID, model.PostStatusDraft).Order("updated_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
 	return posts, err
 }
 
@@ -176,7 +175,7 @@ func (r *PostRepository) SearchPosts(ctx context.Context, tx *gorm.DB, keyword s
 	if strings.TrimSpace(processedKeyword) == "" {
 		return []model.Post{}, nil
 	}
-	err := db.WithContext(ctx).Model(&model.Post{}).Preload("Author").Where("status=?", 1).Where("MATCH(title,content) AGAINST(? IN NATURAL LANGUAGE MODE)", keyword).Order("created_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
+	err := db.WithContext(ctx).Model(&model.Post{}).Preload("Author").Where("status=?", model.PostStatusPublished).Where("MATCH(title,content) AGAINST(? IN NATURAL LANGUAGE MODE)", keyword).Order("created_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
 	return posts, err
 }
 
@@ -187,7 +186,7 @@ func (r *PostRepository) FindRecentPostIDsByAuthor(ctx context.Context, tx *gorm
 		db = tx
 	}
 	var posts []model.Post
-	err := db.WithContext(ctx).Model(&model.Post{}).Select("id,created_at").Where("author_id = ? AND status = ?", authorID, 1).Order("created_at DESC").Limit(limit).Find(&posts).Error
+	err := db.WithContext(ctx).Model(&model.Post{}).Select("id,created_at").Where("author_id = ? AND status = ?", authorID, model.PostStatusPublished).Order("created_at DESC").Limit(limit).Find(&posts).Error
 	return posts, err
 }
 

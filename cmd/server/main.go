@@ -43,20 +43,14 @@ func main() {
 		DB:       config.Setting.Redis.DB,
 	})
 	repos := repository.NewRepositories(db)
-	socialService := service.NewUserService(
-		repos.Relation,
-		repos.Like,
-		repos.Post,
-		repos.Feed,
-		repos.Comment,
-		repos.User,
-		repos.Notification,
-		repos.Message,
+	jwtSecret := config.Setting.JWT.Secret
+	socialService := service.NewService(
+		db,
 		rdb,
-		config.Setting.JWT.Secret,
-		repos.Connection,
+		repos,
+		jwtSecret,
 	)
-	httpHandler := handler.NewUserHandler(socialService)
+	httpHandler := handler.NewHandler(socialService)
 	r := gin.Default()
 	r.Use(middleware.CustomRecovery())
 	r.Use(middleware.RateLimit(rdb, 20))
