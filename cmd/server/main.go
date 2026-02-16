@@ -23,13 +23,13 @@ func main() {
 	}
 	gin.SetMode(config.Setting.Server.Mode)
 	dsn := config.Setting.Database.GetDSN()
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+	db1, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
 		log.Fatalf("Mysql init failed:%v", err)
 	}
-	err = db.AutoMigrate(
+	err = db1.AutoMigrate(
 		&model.Notification{},
 		&model.Like{},
 		&model.Comment{},
@@ -42,15 +42,16 @@ func main() {
 		Password: config.Setting.Redis.Password,
 		DB:       config.Setting.Redis.DB,
 	})
-	repos := repository.NewRepositories(db)
+	repos := repository.NewRepositories(db1)
 	jwtSecret := config.Setting.JWT.Secret
+	var db *gorm.DB
 	socialService := service.NewService(
 		db,
 		rdb,
 		repos,
 		jwtSecret,
 	)
-	httpHandler := handler.NewHandler(socialService)
+	httpHandler := handler.NewHandler(socialService, db)
 	r := gin.Default()
 	r.Use(middleware.CustomRecovery())
 	r.Use(middleware.RateLimit(rdb, 20))
