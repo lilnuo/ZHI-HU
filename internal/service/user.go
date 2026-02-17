@@ -9,6 +9,7 @@ import (
 	"go-zhihu/internal/repository"
 	"go-zhihu/pkg/e"
 	"log"
+	"net/mail"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -45,10 +46,11 @@ func (s *UserService) Register(ctx context.Context, tx *gorm.DB, username, passw
 	if len(password) < 6 {
 		return e.ErrInvalidArgs
 	}
-	if !emailRegex.MatchString(email) {
+	_, err := mail.ParseAddress(email)
+	if err != nil {
 		return e.ErrInvalidArgs
 	}
-	_, err := s.repo.FindUsername(ctx, tx, username)
+	_, err = s.repo.FindUsername(ctx, tx, username)
 	if err == nil {
 		return e.ErrorUserExist
 	}

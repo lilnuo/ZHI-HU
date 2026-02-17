@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
 
 	"net/http"
 	"strings"
@@ -100,6 +101,8 @@ func RateLimit(rdb *redis.Client, requestLimit int) gin.HandlerFunc {
 }
 func CheckStatus(userRepo *repository.UserRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		var tx *gorm.DB
 		userID, exists := c.Get("user_id")
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户身份未确认"})
@@ -107,7 +110,7 @@ func CheckStatus(userRepo *repository.UserRepository) gin.HandlerFunc {
 			return
 		}
 		uid := userID.(uint)
-		isBanned, err := userRepo.IsUserBanned(uid)
+		isBanned, err := userRepo.IsUserBanned(ctx, tx, uid)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法验证用户状态"})
 			c.Abort()

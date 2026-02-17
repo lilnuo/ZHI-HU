@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: go-zhihu-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: nssg0822# 与 config.yaml 保持一致
+      MYSQL_DATABASE: go_zhihu          # 与 config.yaml 保持一致
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:alpine
+    container_name: go-zhihu-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  mysql_data:
