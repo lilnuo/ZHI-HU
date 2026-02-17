@@ -1,22 +1,23 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
-	"github.com/swaggo/files"
-	"github.com/swaggo/gin-swagger"
-	"go-zhihu/cmd/init"
+	"database/sql"
+	"go-zhihu/cmd/start"
 	"go-zhihu/config"
-	"go-zhihu/docs"
 	"go-zhihu/internal/handler"
 	"go-zhihu/internal/middleware"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"go-zhihu/internal/service"
+	"log"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
+	"github.com/swaggo/files"
+	"github.com/swaggo/gin-swagger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"log"
 )
 
 //@title Go-Zhihu API
@@ -32,15 +33,43 @@ import (
 
 func main() {
 	if err := config.Init("config/config.yaml"); err != nil {
-		log.Fatalf("Config init failed:%v", err)
+		log.Fatalf("Config start failed:%v", err)
 	}
 	gin.SetMode(config.Setting.Server.Mode)
 	dsn := config.Setting.Database.GetDSN()
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		DisableForeignKeyConstraintWhenMigrating: true,
+		SkipDefaultTransaction:                   true,
+		Logger:                                   logger.Default.LogMode(logger.Info),
+		DisableAutomaticPing:                     true,
 	})
 	if err != nil {
-		log.Fatalf("Mysql init failed:%v", err)
+		log.Fatalf("Mysql start failed:%v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func(sqlDB *sql.DB) {
+		err := sqlDB.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(sqlDB)
+	db.Exec("SET FOREIGN_KEY_CHECKS = 0")
+	tables := []interface{}{
+		&model.Notification{},
+		&model.Like{},
+		&model.User{},
+		&model.Post{},
+		&model.Relation{},
+		&model.Comment{},
+	}
+	for _, table := range tables {
+		err := db.Migrator().DropTable(table)
+		if err != nil {
+			return
+		}
 	}
 	err = db.AutoMigrate(
 		&model.Notification{},
@@ -50,6 +79,7 @@ func main() {
 		&model.Connection{},
 		&model.User{},
 		&model.Relation{})
+	db.Exec("SET FOREIGN_KEY_CHECKS = 1")
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     config.Setting.Redis.GetAddr(),
 		Password: config.Setting.Redis.Password,
@@ -69,6 +99,6 @@ func main() {
 	r.Use(middleware.CustomRecovery())
 	r.Use(middleware.RateLimit(rdb, 20))
 	r.Use(middleware.CheckStatus(repos.User))
-	init.SetRoute(r, httpHandler)
+	start.SetRoute(r, httpHandler)
 
 }

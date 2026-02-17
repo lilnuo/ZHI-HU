@@ -23,7 +23,7 @@ type Post struct {
 	gorm.Model
 	Title    string `gorm:"type:varchar(255);not null;comment:标题" json:"title"`
 	Content  string `gorm:"type:longtext;not null;comment:内容(Markdown/HTML)" json:"content"`
-	Type     int    `grom:"type:tinyint;not null;default:1;comment:类型(1:文章,2:问题)" json:"type"`
+	Type     int    `gorm:"type:tinyint;not null;default:1;comment:类型(1:文章,2:问题)" json:"type"`
 	AuthorID uint   `gorm:"not null;index:idx_author;comment:作者ID" json:"authorID"`
 	Status   int    `gorm:"type:tinyint;not null;default:1;comment:状态(0:草稿,1:已发布,2:已删除)" json:"status"`
 
@@ -39,9 +39,9 @@ type User struct {
 	Password string    `gorm:"type:varchar(128);not null;comment:密码(加盐hash)" json:"-"`
 	Email    string    `gorm:"type:varchar(64);uniqueIndex;comment:邮箱" json:"email"`
 	Avatar   string    `gorm:"type:varchar(255);comment:头像URL" json:"avatar"`
-	Bio      string    `gorm:"varchar(255);comment:头像URL" json:"bio"`
-	Role     int       `gorm:"type:tinyint;default;1;comment:角色(1:普通用户,2:管理员)" json:"role"`
-	Status   int       `gorm:"type:tinyint;default;1;comment;状态(0:禁言,1:正常)" json:"status"`
+	Bio      string    `gorm:"type:varchar(255);comment:头像URL" json:"bio"`
+	Role     int       `gorm:"type:tinyint;default:1;comment:角色(1:普通用户,2:管理员)" json:"role"`
+	Status   int       `gorm:"type:tinyint;default:1;comment;状态(0:禁言,1:正常)" json:"status"`
 	Posts    []Post    `gorm:"foreignKey:AuthorID" json:"posts,omitempty"`
 	Comments []Comment `gorm:"foreignKey:AuthorID" json:"comments,omitempty"`
 }

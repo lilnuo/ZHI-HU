@@ -1,4 +1,4 @@
-package init
+package start
 
 import (
 	"fmt"
@@ -48,7 +48,7 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler) {
 		writerGroup.POST("/like", httpHandler.ToggleLike)
 		//comment
 		writerGroup.GET("/posts/comments", httpHandler.GetComments)
-		writerGroup.POST("/posts/:post_id/comments", httpHandler.AddComment)
+		writerGroup.POST("/posts/:id/comments", httpHandler.AddComment)
 		//feed
 		authGroup.GET("/feed", httpHandler.GetFeed)
 		//通知中心
