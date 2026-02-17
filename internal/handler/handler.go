@@ -18,6 +18,16 @@ func NewHandler(Service *service.Service, db *gorm.DB) *Handler {
 	return &Handler{Service: Service, db: db}
 }
 
+// Register 用户注册
+// @Summary 用户注册
+// Description 创建新用户账号
+// @Tags 用户认证
+// @Accept json
+// @Produce json
+// @Param data body  RegisterReq true "注册信息"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Route /register [post]
 type RegisterReq struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required,min=6"`
