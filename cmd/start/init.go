@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"go-zhihu/internal/handler"
 	"go-zhihu/internal/middleware"
+	"go-zhihu/internal/repository"
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func SetRoute(r *gin.Engine, httpHandler *handler.Handler) {
+func SetRoute(r *gin.Engine, httpHandler *handler.Handler, repos *repository.Repositories, db *gorm.DB) {
 
 	publicGroup := r.Group("/api/v1")
 	{
@@ -20,6 +22,7 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler) {
 	}
 	authGroup := r.Group("/user")
 	authGroup.Use(middleware.AuthMiddleware())
+	authGroup.Use(middleware.CheckStatus(repos.User, db))
 	{
 		writerGroup := authGroup.Group("/")
 		//user社交关系

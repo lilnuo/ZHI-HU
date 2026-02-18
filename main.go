@@ -102,7 +102,6 @@ func main() {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.Use(middleware.CustomRecovery())
 	r.Use(middleware.RateLimit(rdb, 20))
-	r.Use(middleware.CheckStatus(repos.User))
-	start.SetRoute(r, httpHandler)
+	start.SetRoute(r, httpHandler, repos, db)
 
 }

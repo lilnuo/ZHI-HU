@@ -99,10 +99,9 @@ func RateLimit(rdb *redis.Client, requestLimit int) gin.HandlerFunc {
 		c.Next()
 	}
 }
-func CheckStatus(userRepo *repository.UserRepository) gin.HandlerFunc {
+func CheckStatus(userRepo *repository.UserRepository, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		var tx *gorm.DB
 		userID, exists := c.Get("user_id")
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户身份未确认"})
@@ -110,7 +109,7 @@ func CheckStatus(userRepo *repository.UserRepository) gin.HandlerFunc {
 			return
 		}
 		uid := userID.(uint)
-		isBanned, err := userRepo.IsUserBanned(ctx, tx, uid)
+		isBanned, err := userRepo.IsUserBanned(ctx, db, uid)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法验证用户状态"})
 			c.Abort()
