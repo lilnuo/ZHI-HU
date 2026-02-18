@@ -2,22 +2,22 @@ package main
 
 import (
 	"database/sql"
+	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
+	"github.com/swaggo/files"
+	"github.com/swaggo/gin-swagger"
 	"go-zhihu/cmd/start"
 	"go-zhihu/config"
+	_ "go-zhihu/docs"
 	"go-zhihu/internal/handler"
 	"go-zhihu/internal/middleware"
 	"go-zhihu/internal/model"
 	"go-zhihu/internal/repository"
 	"go-zhihu/internal/service"
-	"log"
-
-	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
-	"github.com/swaggo/files"
-	"github.com/swaggo/gin-swagger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"log"
 )
 
 //@title Go-Zhihu API
@@ -95,6 +95,10 @@ func main() {
 	)
 	httpHandler := handler.NewHandler(socialService, db)
 	r := gin.Default()
+	err = r.SetTrustedProxies(nil)
+	if err != nil {
+		return
+	}
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.Use(middleware.CustomRecovery())
 	r.Use(middleware.RateLimit(rdb, 20))

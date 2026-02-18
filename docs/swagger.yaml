@@ -1,4 +1,49 @@
 basePath: /api/v1
+definitions:
+  handler.CreatePostRequest:
+    properties:
+      content:
+        type: string
+      status:
+        type: integer
+      title:
+        type: string
+      type:
+        description: 1.chapter 2.question
+        enum:
+        - 1
+        - 2
+        type: integer
+    required:
+    - content
+    - status
+    - title
+    - type
+    type: object
+  handler.LoginReq:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  handler.RegisterReq:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 6
+        type: string
+      username:
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -10,5 +55,131 @@ info:
   termsOfService: http://swagger.io/terms/
   title: Go-Zhihu API
   version: "1.0"
-paths: {}
+paths:
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: 用户登录获取Token
+      parameters:
+      - description: 登录信息
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handler.LoginReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 用户登录
+      tags:
+      - 用户认证
+  /posts/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 根据ID获取文章详情
+      parameters:
+      - description: 文章ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取文章详情
+      tags:
+      - 文章
+  /posts/search:
+    get:
+      consumes:
+      - application/json
+      description: 根据关键词搜索文章列表
+      parameters:
+      - description: 搜索关键词
+        in: query
+        name: keyword
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 搜索文章
+      tags:
+      - 文章
+  /register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 注册信息
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RegisterReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 用户注册
+      tags:
+      - 用户认证
+  /user/posts:
+    post:
+      consumes:
+      - application/json
+      description: 用户发布新的内容
+      parameters:
+      - description: 文章内容
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreatePostRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 创建文章或问题
+      tags:
+      - 文章
 swagger: "2.0"

@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:alpine AS builder
 
 WORKDIR /build
 
@@ -11,15 +11,15 @@ RUN CGO_ENABLED=0  GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o go-zhihu
 
 FROM alpine:latest
 
-RUN apk --no-cache add caocertificates tzdata && \
+RUN apk --no-cache add ca-certificates tzdata && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
 
 WORKDIR /app
 
-COPY --form=builder /build/go-zhihu .
+COPY  --from=builder /build/go-zhihu .
 
-COPY --from=builder /build/config ./config
+COPY  --from=builder /build/config ./config
 
 EXPOSE 8080
 

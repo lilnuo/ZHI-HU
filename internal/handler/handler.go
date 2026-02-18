@@ -18,16 +18,6 @@ func NewHandler(Service *service.Service, db *gorm.DB) *Handler {
 	return &Handler{Service: Service, db: db}
 }
 
-// Register 用户注册
-// @Summary 用户注册
-// Description 创建新用户账号
-// @Tags 用户认证
-// @Accept json
-// @Produce json
-// @Param data body  RegisterReq true "注册信息"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Route /register [post]
 type RegisterReq struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required,min=6"`
@@ -67,6 +57,16 @@ func parseIDParam(c *gin.Context, paramKey string) (uint, error) {
 }
 
 // 注册与登陆
+// Register 用户注册
+// @Summary 用户注册
+// Description 创建新用户账号
+// @Tags 用户认证
+// @Accept json
+// @Produce json
+// @Param data body  RegisterReq true "注册信息"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Router /register [post]# 替换 username 为你的 Docker Hub 用户名
 func (h *Handler) Register(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -81,6 +81,16 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	e.SuccessResponse(c, e.ErrSuccess)
 }
+
+// Login 用户登录
+// @Summary 用户登录
+// @Description 用户登录获取Token
+// @Tags 用户认证
+// @Accept json
+// @Produce json
+// @Param data body LoginReq true "登录信息"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Router /login [post]
 func (h *Handler) Login(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -125,6 +135,16 @@ type CreatePostRequest struct {
 	Status  int    `json:"status" binding:"required"`
 }
 
+// CreatPost 创建文章
+// @Summary 创建文章或问题
+// @Description 用户发布新的内容
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param data body CreatePostRequest true "文章内容"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Router /user/posts [post]
 func (h *Handler) CreatPost(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -203,6 +223,15 @@ func (h *Handler) GetComments(c *gin.Context) {
 	e.SuccessResponse(c, comments)
 }
 
+// GetPostDetail 获取文章详情
+// @Summary 获取文章详情
+// @Description 根据ID获取文章详情
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Param id path int true "文章ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Router /posts/{id} [get]
 func (h *Handler) GetPostDetail(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -278,6 +307,18 @@ func (h *Handler) DeletePost(c *gin.Context) {
 	}
 	e.SuccessResponse(c, nil)
 }
+
+// Search 搜索文章
+// @Summary 搜索文章
+// @Description 根据关键词搜索文章列表
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Param keyword query string false "搜索关键词"
+// @Param page query int false "页码"
+// @Param page_size query int false "每页数量"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Router /posts/search [get]
 func (h *Handler) Search(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db

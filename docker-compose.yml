@@ -1,23 +1,50 @@
 version: '3.8'
 
 services:
+  # 1. 你的 Go 应用
+  app:
+    build: .  # 使用当前目录的 Dockerfile 构建
+    container_name: go-zhihu-app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config # 挂载本地配置文件，方便修改调试
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - zhihu-net
+
+  # 2. MySQL 数据库
   mysql:
     image: mysql:8.0
     container_name: go-zhihu-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: nssg0822# 与 config.yaml 保持一致
-      MYSQL_DATABASE: go_zhihu          # 与 config.yaml 保持一致
+      MYSQL_ROOT_PASSWORD: "12345678"
+      MYSQL_DATABASE: go_zhihu      # 自动创建数据库
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "3306:3306"  # 映射端口，方便你用本地 Navicat 连接查看数据
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - zhihu-net
 
+  # 3. Redis 缓存
   redis:
     image: redis:alpine
     container_name: go-zhihu-redis
     ports:
-      - "6379:6379"
+      - "6379:6379"  # 映射端口，方便本地 Redis 客户端连接
+    volumes:
+      - redis_data:/data
+    networks:
+      - zhihu-net
 
 volumes:
   mysql_data:
+  redis_data:
+
+networks:
+  zhihu-net:
+    driver: bridge
