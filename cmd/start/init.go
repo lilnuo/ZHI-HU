@@ -13,7 +13,7 @@ import (
 
 func SetRoute(r *gin.Engine, httpHandler *handler.Handler, repos *repository.Repositories, db *gorm.DB) {
 
-	publicGroup := r.Group("/api/v1")
+	publicGroup := r.Group("")
 	{
 		publicGroup.POST("/register", httpHandler.Register)
 		publicGroup.POST("/login", httpHandler.Login)
@@ -70,7 +70,7 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler, repos *repository.Rep
 	authGroup.GET("/feed", httpHandler.GetFeed)
 
 	//administer
-	adminGroup := authGroup.Group("/")
+	adminGroup := authGroup.Group("/admin")
 	adminGroup.Use(middleware.AdminMiddleware())
 	{
 		adminGroup.POST("/ban/:id", httpHandler.BanUser)

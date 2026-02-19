@@ -108,6 +108,18 @@ func (h *Handler) Login(c *gin.Context) {
 }
 
 // 更新个人信息
+// UpdateProfile 更新个人信息
+// @Summary 更新个人信息
+// @Description 更新当前用户的头像、简介或状态
+// @Tags 用户
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param data body UpdateProfileRe true "更新信息"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/profile [put]
 func (h *Handler) UpdateProfile(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -165,6 +177,19 @@ func (h *Handler) CreatPost(c *gin.Context) {
 }
 
 // 获取草稿箱列表
+// GetDrafts 获取草稿箱列表
+// @Summary 获取草稿箱列表
+// @Description 获取当前用户的草稿列表
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /user/posts/drafts [get]
 func (h *Handler) GetDrafts(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -191,6 +216,17 @@ func (h *Handler) GetDrafts(c *gin.Context) {
 }
 
 // 获取最新文章列表
+// GetLatestPosts 获取最新文章列表
+// @Summary 获取最新文章列表
+// @Description 获取最新发布的文章或问题列表
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /user/posts/lists [get]
 func (h *Handler) GetLatestPosts(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -207,6 +243,16 @@ func (h *Handler) GetLatestPosts(c *gin.Context) {
 }
 
 // 看评论
+// GetComments 获取评论列表
+// @Summary 获取文章评论
+// @Description 根据文章ID获取评论列表
+// @Tags 互动
+// @Accept json
+// @Produce json
+// @Param post_id path int true "文章ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Router /user/posts/{post_id} [get]
 func (h *Handler) GetComments(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -247,6 +293,20 @@ func (h *Handler) GetPostDetail(c *gin.Context) {
 	}
 	e.SuccessResponse(c, post)
 }
+
+// UpdatePost 更新文章
+// @Summary 更新文章
+// @Description 更新指定ID的文章内容
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "文章ID"
+// @Param data body CreatePostRequest true "文章内容"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/posts/{id} [put]
 func (h *Handler) UpdatePost(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -271,6 +331,18 @@ func (h *Handler) UpdatePost(c *gin.Context) {
 }
 
 // 发布草稿
+// PublishPost 发布草稿
+// @Summary 发布草稿
+// @Description 将草稿状态的变更为发布状态
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "文章ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/posts/{id}/publish [post]
 func (h *Handler) PublishPost(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -289,6 +361,19 @@ func (h *Handler) PublishPost(c *gin.Context) {
 	}
 	e.SuccessResponse(c, nil)
 }
+
+// DeletePost 删除文章
+// @Summary 删除文章
+// @Description 删除指定ID的文章
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "文章ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/posts/{id} [delete]
 func (h *Handler) DeletePost(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -334,6 +419,19 @@ func (h *Handler) Search(c *gin.Context) {
 	}
 	e.SuccessResponse(c, posts)
 }
+
+// FollowUser 关注用户
+// @Summary 关注用户
+// @Description 关注指定ID的用户
+// @Tags 用户关系
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "被关注用户ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/follow/{id} [post]
 func (h *Handler) FollowUser(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -350,8 +448,20 @@ func (h *Handler) FollowUser(c *gin.Context) {
 		return
 	}
 	e.SuccessResponse(c, nil)
-
 }
+
+// UnFollowUser 取消关注用户
+// @Summary 取消关注用户
+// @Description 取消关注指定ID的用户
+// @Tags 用户关系
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "被取消关注用户ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/unfollow/{id}/ [post]
 func (h *Handler) UnFollowUser(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -375,6 +485,19 @@ type AddCommentRequest struct {
 	Content string `json:"content" binding:"required"`
 }
 
+// AddComment 添加评论
+// @Summary 添加评论
+// @Description 对指定文章添加评论
+// @Tags 互动
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "文章ID"
+// @Param data body AddCommentRequest true "评论内容"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/posts/{id}/comments [post]
 func (h *Handler) AddComment(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -398,6 +521,19 @@ func (h *Handler) AddComment(c *gin.Context) {
 	}
 	e.SuccessResponse(c, nil)
 }
+
+// GetFeed 获取Feed流
+// @Summary 获取关注动态
+// @Description 获取当前用户关注的人的动态流
+// @Tags Feed
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/feed [get]
 func (h *Handler) GetFeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -416,6 +552,19 @@ func (h *Handler) GetFeed(c *gin.Context) {
 	}
 	e.SuccessResponse(c, posts)
 }
+
+// BanUser 封禁用户
+// @Summary 封禁用户
+// @Description 管理员封禁指定用户
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "用户ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /admin/ban/{id} [post]
 func (h *Handler) BanUser(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -436,6 +585,18 @@ func (h *Handler) BanUser(c *gin.Context) {
 }
 
 // 解禁补充
+// UnbanUser 解禁用户
+// @Summary 解禁用户
+// @Description 管理员解禁指定用户
+// @Tags 用户管理
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "用户ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /admin/ban/{id} [post]
 func (h *Handler) UnbanUser(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -456,6 +617,15 @@ func (h *Handler) UnbanUser(c *gin.Context) {
 }
 
 // 排行榜补充
+// GetLeaderboard 获取排行榜
+// @Summary 获取排行榜
+// @Description 获取热门文章排行榜
+// @Tags 文章
+// @Accept json
+// @Produce json
+// @Param limit query int false "数量限制" default(10)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Router /posts/ranking [get]
 func (h *Handler) GetLeaderboard(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -476,6 +646,18 @@ func (h *Handler) GetLeaderboard(c *gin.Context) {
 }
 
 // 获取粉丝或关注列表
+// GetFollowers 获取粉丝列表
+// @Summary 获取粉丝列表
+// @Description 获取当前用户的粉丝列表
+// @Tags 用户关系
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(20)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/followers [get]
 func (h *Handler) GetFollowers(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -500,6 +682,19 @@ func (h *Handler) GetFollowers(c *gin.Context) {
 	}
 	e.SuccessResponse(c, users)
 }
+
+// GetFollowees 获取关注列表
+// @Summary 获取关注列表
+// @Description 获取当前用户关注的用户列表
+// @Tags 用户关系
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(20)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/following [get]
 func (h *Handler) GetFollowees(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -526,6 +721,18 @@ func (h *Handler) GetFollowees(c *gin.Context) {
 }
 
 // 关注收藏文章或问题
+// ToggleConn 收藏/取消收藏文章
+// @Summary 收藏/取消收藏文章
+// @Description 切换对文章的收藏状态
+// @Tags 互动
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "文章ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/connection/{id} [post]
 func (h *Handler) ToggleConn(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -544,6 +751,19 @@ func (h *Handler) ToggleConn(c *gin.Context) {
 	}
 	e.SuccessResponse(c, nil)
 }
+
+// GetConn 获取收藏列表
+// @Summary 获取收藏列表
+// @Description 获取当前用户的收藏文章列表
+// @Tags 互动
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/collections [get]
 func (h *Handler) GetConn(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -575,6 +795,18 @@ type ToggleLikeRequest struct {
 	Type     int  `json:"type" binding:"required,oneof=1 2"` //1:文章/问题·,2:评论
 }
 
+// ToggleLike 点赞/取消点赞
+// @Summary 点赞/取消点赞
+// @Description 对文章或评论进行点赞/取消点赞操作
+// @Tags 互动
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param data body ToggleLikeRequest true "点赞信息"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/like [post]
 func (h *Handler) ToggleLike(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -595,6 +827,19 @@ func (h *Handler) ToggleLike(c *gin.Context) {
 }
 
 // 获取通知列表
+// GetNotifications 获取通知列表
+// @Summary 获取通知列表
+// @Description 获取当前用户的系统通知列表
+// @Tags 通知
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /user/notifications [get]
 func (h *Handler) GetNotifications(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -615,6 +860,17 @@ func (h *Handler) GetNotifications(c *gin.Context) {
 }
 
 // 红标数量
+// GetUnreadCount 获取未读通知数量
+// @Summary 获取未读通知数量
+// @Description 获取当前用户的未读系统通知数量
+// @Tags 通知
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /user/notifications/unread [get]
 func (h *Handler) GetUnreadCount(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -631,6 +887,18 @@ func (h *Handler) GetUnreadCount(c *gin.Context) {
 }
 
 // 单条已读
+// MarkNotificationRead 标记通知为已读
+// @Summary 标记通知为已读
+// @Description 将指定ID的通知标记为已读
+// @Tags 通知
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "通知ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/notifications/read/{id} [put]
 func (h *Handler) MarkNotificationRead(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -649,6 +917,17 @@ func (h *Handler) MarkNotificationRead(c *gin.Context) {
 	}
 	e.SuccessResponse(c, nil)
 }
+
+// MarkAllRead 全部标记已读
+// @Summary 全部标记已读
+// @Description 将当前用户的所有通知标记为已读
+// @Tags 通知
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/notifications/read/read-all [put]
 func (h *Handler) MarkAllRead(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -669,6 +948,18 @@ type SendMsgRequest struct {
 	Content    string `json:"content" binding:"required,min=1"`
 }
 
+// SendMsg 发送私信
+// @Summary 发送私信
+// @Description 给指定用户发送私信
+// @Tags 消息
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param data body SendMsgRequest true "消息内容"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/messages [post]
 func (h *Handler) SendMsg(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -687,6 +978,20 @@ func (h *Handler) SendMsg(c *gin.Context) {
 	}
 	e.SuccessResponse(c, nil)
 } //聊天记录
+// GetChatHistory 获取聊天记录
+// @Summary 获取聊天记录
+// @Description 获取与指定用户的聊天记录
+// @Tags 消息
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path int true "对方用户ID"
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(20)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/messages/{id} [get]
 func (h *Handler) GetChatHistory(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -711,6 +1016,16 @@ func (h *Handler) GetChatHistory(c *gin.Context) {
 }
 
 // 会话列表
+// GetConversations 获取会话列表
+// @Summary 获取会话列表
+// @Description 获取当前用户的私信会话列表
+// @Tags 消息
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Router /user/messsages/conversations [get]
 func (h *Handler) GetConversations(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -725,6 +1040,18 @@ func (h *Handler) GetConversations(c *gin.Context) {
 	}
 	e.SuccessResponse(c, list)
 }
+
+// GetTotalUnread 获取私信未读总数
+// @Summary 获取私信未读总数
+// @Description 获取当前用户的私信未读消息总数
+// @Tags 消息
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /user/messages/unread [get]
 func (h *Handler) GetTotalUnread(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -740,8 +1067,17 @@ func (h *Handler) GetTotalUnread(c *gin.Context) {
 	e.SuccessResponse(c, counts)
 }
 
-//获取指定用户基本资料以及公开文章
-
+// 获取指定用户基本资料以及公开文章
+// GetUserProfile 获取指定用户资料
+// @Summary 获取指定用户资料
+// @Description 获取指定ID用户的公开资料
+// @Tags 用户
+// @Accept json
+// @Produce json
+// @Param id path int true "用户ID"
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Router /users/{id}/profile [get]
 func (h *Handler) GetUserProfile(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
@@ -757,6 +1093,20 @@ func (h *Handler) GetUserProfile(c *gin.Context) {
 	}
 	e.SuccessResponse(c, profile)
 }
+
+// GetUserPosts 获取指定用户文章
+// @Summary 获取指定用户文章
+// @Description 获取指定ID用户发布的公开文章列表
+// @Tags 用户
+// @Accept json
+// @Produce json
+// @Param id path int true "用户ID"
+// @Param page query int false "页码" default(1)
+// @Param page_size query int false "每页数量" default(10)
+// @Success 200 {object} map[string]interface{} "成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /users/{id}/posts [get]
 func (h *Handler) GetUserPosts(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx := h.db
