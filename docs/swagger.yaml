@@ -1,5 +1,12 @@
 basePath: /api/v1
 definitions:
+  handler.AddCommentRequest:
+    properties:
+      content:
+        type: string
+    required:
+    - content
+    type: object
   handler.CreatePostRequest:
     properties:
       content:
@@ -44,6 +51,42 @@ definitions:
     - password
     - username
     type: object
+  handler.SendMsgRequest:
+    properties:
+      content:
+        minLength: 1
+        type: string
+      receiver_id:
+        type: integer
+    required:
+    - content
+    - receiver_id
+    type: object
+  handler.ToggleLikeRequest:
+    properties:
+      target_id:
+        type: integer
+      type:
+        description: 1:文章/问题·,2:评论
+        enum:
+        - 1
+        - 2
+        type: integer
+    required:
+    - target_id
+    - type
+    type: object
+  handler.UpdateProfileRe:
+    properties:
+      avatar:
+        type: string
+      bio:
+        maxLength: 500
+        type: string
+      status:
+        description: 用*区分不传与传0
+        type: integer
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -56,6 +99,40 @@ info:
   title: Go-Zhihu API
   version: "1.0"
 paths:
+  /admin/ban/{id}:
+    post:
+      consumes:
+      - application/json
+      description: 管理员解禁指定用户
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 解禁用户
+      tags:
+      - 用户管理
   /login:
     post:
       consumes:
@@ -99,6 +176,28 @@ paths:
             additionalProperties: true
             type: object
       summary: 获取文章详情
+      tags:
+      - 文章
+  /posts/ranking:
+    get:
+      consumes:
+      - application/json
+      description: 获取热门文章排行榜
+      parameters:
+      - default: 10
+        description: 数量限制
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取排行榜
       tags:
       - 文章
   /posts/search:
@@ -157,6 +256,499 @@ paths:
       summary: 用户注册
       tags:
       - 用户认证
+  /user/collections:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的收藏文章列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取收藏列表
+      tags:
+      - 互动
+  /user/connection/{id}:
+    post:
+      consumes:
+      - application/json
+      description: 切换对文章的收藏状态
+      parameters:
+      - description: 文章ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 收藏/取消收藏文章
+      tags:
+      - 互动
+  /user/feed:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户关注的人的动态流
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取关注动态
+      tags:
+      - Feed
+  /user/follow/{id}:
+    post:
+      consumes:
+      - application/json
+      description: 关注指定ID的用户
+      parameters:
+      - description: 被关注用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 关注用户
+      tags:
+      - 用户关系
+  /user/followers:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的粉丝列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取粉丝列表
+      tags:
+      - 用户关系
+  /user/following:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户关注的用户列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取关注列表
+      tags:
+      - 用户关系
+  /user/like:
+    post:
+      consumes:
+      - application/json
+      description: 对文章或评论进行点赞/取消点赞操作
+      parameters:
+      - description: 点赞信息
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handler.ToggleLikeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 点赞/取消点赞
+      tags:
+      - 互动
+  /user/messages:
+    post:
+      consumes:
+      - application/json
+      description: 给指定用户发送私信
+      parameters:
+      - description: 消息内容
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handler.SendMsgRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 发送私信
+      tags:
+      - 消息
+  /user/messages/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 获取与指定用户的聊天记录
+      parameters:
+      - description: 对方用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取聊天记录
+      tags:
+      - 消息
+  /user/messages/unread:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的私信未读消息总数
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取私信未读总数
+      tags:
+      - 消息
+  /user/messsages/conversations:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的私信会话列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取会话列表
+      tags:
+      - 消息
+  /user/notifications:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的系统通知列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取通知列表
+      tags:
+      - 通知
+  /user/notifications/read/{id}:
+    put:
+      consumes:
+      - application/json
+      description: 将指定ID的通知标记为已读
+      parameters:
+      - description: 通知ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 标记通知为已读
+      tags:
+      - 通知
+  /user/notifications/read/read-all:
+    put:
+      consumes:
+      - application/json
+      description: 将当前用户的所有通知标记为已读
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 全部标记已读
+      tags:
+      - 通知
+  /user/notifications/unread:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的未读系统通知数量
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取未读通知数量
+      tags:
+      - 通知
   /user/posts:
     post:
       consumes:
@@ -182,4 +774,387 @@ paths:
       summary: 创建文章或问题
       tags:
       - 文章
+  /user/posts/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除指定ID的文章
+      parameters:
+      - description: 文章ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 删除文章
+      tags:
+      - 文章
+    put:
+      consumes:
+      - application/json
+      description: 更新指定ID的文章内容
+      parameters:
+      - description: 文章ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 文章内容
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreatePostRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 更新文章
+      tags:
+      - 文章
+  /user/posts/{id}/comments:
+    post:
+      consumes:
+      - application/json
+      description: 对指定文章添加评论
+      parameters:
+      - description: 文章ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 评论内容
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AddCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 添加评论
+      tags:
+      - 互动
+  /user/posts/{id}/publish:
+    post:
+      consumes:
+      - application/json
+      description: 将草稿状态的变更为发布状态
+      parameters:
+      - description: 文章ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 发布草稿
+      tags:
+      - 文章
+  /user/posts/{post_id}:
+    get:
+      consumes:
+      - application/json
+      description: 根据文章ID获取评论列表
+      parameters:
+      - description: 文章ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取文章评论
+      tags:
+      - 互动
+  /user/posts/drafts:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前用户的草稿列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取草稿箱列表
+      tags:
+      - 文章
+  /user/posts/lists:
+    get:
+      consumes:
+      - application/json
+      description: 获取最新发布的文章或问题列表
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取最新文章列表
+      tags:
+      - 文章
+  /user/profile:
+    put:
+      consumes:
+      - application/json
+      description: 更新当前用户的头像、简介或状态
+      parameters:
+      - description: 更新信息
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UpdateProfileRe'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 更新个人信息
+      tags:
+      - 用户
+  /user/unfollow/{id}/:
+    post:
+      consumes:
+      - application/json
+      description: 取消关注指定ID的用户
+      parameters:
+      - description: 被取消关注用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 取消关注用户
+      tags:
+      - 用户关系
+  /users/{id}/posts:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定ID用户发布的公开文章列表
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取指定用户文章
+      tags:
+      - 用户
+  /users/{id}/profile:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定ID用户的公开资料
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取指定用户资料
+      tags:
+      - 用户
 swagger: "2.0"
