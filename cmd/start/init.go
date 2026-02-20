@@ -27,38 +27,38 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler, repos *repository.Rep
 		writerGroup := authGroup.Group("/")
 		//user社交关系
 		//people interaction
-		writerGroup.POST("/follow/:id", httpHandler.FollowUser)
-		writerGroup.POST("/unfollow/:id", httpHandler.UnFollowUser)
+		writerGroup.POST("follow/:id", httpHandler.FollowUser)
+		writerGroup.POST("unfollow/:id", httpHandler.UnFollowUser)
 		writerGroup.GET("followers", httpHandler.GetFollowers)
 		writerGroup.GET("following", httpHandler.GetFollowees)
 		//用户信息
 		writerGroup.PUT("profile", httpHandler.UpdateProfile)
 		writerGroup.GET("profile", httpHandler.GetUserProfile)
-		writerGroup.GET("/:id/posts", httpHandler.GetUserPosts)
+		writerGroup.GET(":id/posts", httpHandler.GetUserPosts)
 		//文章操作
-		writerGroup.GET("/posts/drafts", httpHandler.GetDrafts)
-		writerGroup.GET("/posts/lists", httpHandler.GetLatestPosts)
-		writerGroup.POST("/posts", httpHandler.CreatPost)
-		writerGroup.POST("/posts/:id/publish", httpHandler.PublishPost)
-		writerGroup.PUT("/posts/:id", httpHandler.UpdatePost)
-		writerGroup.DELETE("/posts/:id", httpHandler.DeletePost)
+		writerGroup.GET("posts/drafts", httpHandler.GetDrafts)
+		writerGroup.GET("posts/lists", httpHandler.GetLatestPosts)
+		writerGroup.POST("posts", httpHandler.CreatPost)
+		writerGroup.POST("posts/:id/publish", httpHandler.PublishPost)
+		writerGroup.PUT("posts/:id", httpHandler.UpdatePost)
+		writerGroup.DELETE("posts/:id", httpHandler.DeletePost)
 		//文章关注
-		writerGroup.POST("/connection/:id", httpHandler.ToggleConn)
-		writerGroup.POST("/connections", httpHandler.GetConn)
+		writerGroup.POST("connection/:id", httpHandler.ToggleConn)
+		writerGroup.POST("connections", httpHandler.GetConn)
 		//点赞文章
-		writerGroup.POST("/like", httpHandler.ToggleLike)
+		writerGroup.POST("like", httpHandler.ToggleLike)
 		//comment
-		writerGroup.GET("/posts/:post_id", httpHandler.GetComments)
-		writerGroup.POST("/posts/:id/comments", httpHandler.AddComment)
+		writerGroup.GET("posts/:post_id", httpHandler.GetComments)
+		writerGroup.POST("posts/:id/comments", httpHandler.AddComment)
 		//通知中心
-		writerGroup.GET("/notifications", httpHandler.GetNotifications)
-		writerGroup.GET("/notifications/unread", httpHandler.GetUnreadCount)
-		writerGroup.PUT("/notifications/read/:id", httpHandler.MarkNotificationRead)
-		writerGroup.PUT("/notifications/read/read_all", httpHandler.MarkAllRead)
+		writerGroup.GET("notifications", httpHandler.GetNotifications)
+		writerGroup.GET("notifications/unread", httpHandler.GetUnreadCount)
+		writerGroup.PUT("notifications/read/:id", httpHandler.MarkNotificationRead)
+		writerGroup.PUT("notifications/read/read_all", httpHandler.MarkAllRead)
 		//私信
-		writerGroup.POST("/messages", httpHandler.SendMsg)
-		writerGroup.GET("/messages/conversations", httpHandler.GetConversations)
-		writerGroup.GET("/messages/unread", httpHandler.GetTotalUnread)
+		writerGroup.POST("messages", httpHandler.SendMsg)
+		writerGroup.GET("messages/conversations", httpHandler.GetConversations)
+		writerGroup.GET("messages/unread", httpHandler.GetTotalUnread)
 		writerGroup.GET("messages/:id", httpHandler.GetChatHistory)
 	}
 	usersGroup := r.Group("/users")
@@ -67,7 +67,7 @@ func SetRoute(r *gin.Engine, httpHandler *handler.Handler, repos *repository.Rep
 		usersGroup.GET("/:id/posts", httpHandler.GetUserPosts)
 	}
 	publicGroup.GET("/posts/:id", httpHandler.GetPostDetail)
-	authGroup.GET("/feed", httpHandler.GetFeed)
+	authGroup.GET("feed", httpHandler.GetFeed)
 
 	//administer
 	adminGroup := authGroup.Group("/admin")
