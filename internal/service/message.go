@@ -60,3 +60,22 @@ func (s *MessageService) GetTotalUnread(ctx context.Context, tx *gorm.DB, userID
 		"total_unread":        notifyCount + msgCount,
 	}, nil
 }
+func (s *MessageService) SendMessage(ctx context.Context, tx *gorm.DB, senderID, receiverID uint, content string) error {
+	if senderID == receiverID {
+		return e.ErrSelfAction
+	}
+	//可以写好友状态，看是否可以发私信
+	sessionID := generateSessionID(senderID, receiverID)
+	msg := &model.Message{
+		SenderID:   senderID,
+		ReceiverID: receiverID,
+		Content:    content,
+		Session:    sessionID,
+		IsRead:     false,
+	}
+	if err := s.repo.CreateMessage(ctx, tx, msg); err != nil {
+		return e.ErrServer
+	}
+	s.notify.sendNotification(ctx, tx, receiverID, senderID, model.NotifyTypeMessage, "给你发来一条私信", 0)
+	return nil
+}

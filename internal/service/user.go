@@ -27,8 +27,8 @@ type UserService struct {
 	secret string
 }
 
-func NewUserService(repo *repository.UserRepository, notify *NotificationService, secret string) *UserService {
-	return &UserService{repo: repo, notify: notify, secret: secret}
+func NewUserService(repo *repository.UserRepository, notify *NotificationService, rdb *redis.Client, secret string) *UserService {
+	return &UserService{repo: repo, notify: notify, rdb: rdb, secret: secret}
 }
 
 type LoginResponse struct {

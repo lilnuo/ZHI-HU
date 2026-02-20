@@ -24,7 +24,7 @@ func NewService(db *gorm.DB, rdb *redis.Client, repos *repository.Repositories, 
 	notifySvc := NewNotificationService(repos.Notification)
 	feedSvc := NewFeedService(repos.Feed, repos.Post, repos.Relation, rdb)
 	return &Service{
-		User:        NewUserService(repos.User, notifySvc, jwtSecret),
+		User:        NewUserService(repos.User, notifySvc, rdb, jwtSecret),
 		Post:        NewPostService(repos.Post, repos.Like, feedSvc, rdb),
 		Interaction: NewInteractionService(repos.Like, repos.Comment, repos.Post, repos.Connection, notifySvc, db),
 		Relation:    NewRelationService(repos.Relation, repos.User, feedSvc, notifySvc),

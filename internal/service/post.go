@@ -61,8 +61,19 @@ func (s *PostService) CreatePost(ctx context.Context, tx *gorm.DB, authorID uint
 	if err := s.repo.CreatePost(ctx, tx, post); err != nil {
 		return e.ErrServer
 	}
-	if status == 1 {
-		go s.DistributePostToFollowers(ctx, tx, post)
+	// 只在发布状态下分发
+	if status == model.PostStatusPublished {
+		// 使用 post 的副本，避免并发问题
+		postCopy := *post
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("panic in DistributePostToFollowers: %v", r)
+				}
+			}()
+			bgCtx := context.Background()
+			s.DistributePostToFollowers(bgCtx, nil, &postCopy)
+		}()
 	}
 	return nil
 }
@@ -73,8 +84,7 @@ func (s *PostService) GetLatestPosts(ctx context.Context, tx *gorm.DB, page, pag
 	offset := (page - 1) * pageSize
 	return s.repo.ListPosts(ctx, tx, offset, pageSize, "created_at")
 }
-func (s *PostService) GetPostDetail(ct context.Context, tx *gorm.DB, postID uint) (*PostDetailVO, error) {
-	ctx := context.Background()
+func (s *PostService) GetPostDetail(ctx context.Context, tx *gorm.DB, postID uint) (*PostDetailVO, error) {
 	cacheKey := fmt.Sprintf(CacheKeyPostDetail, postID)
 	val, err := s.rdb.Get(ctx, cacheKey).Result()
 	if err == nil {
@@ -89,7 +99,7 @@ func (s *PostService) GetPostDetail(ct context.Context, tx *gorm.DB, postID uint
 	if err != nil && !errors.Is(err, redis.Nil) {
 		log.Printf("redis error:%v", err)
 	}
-	post, err := s.repo.FindPostByID(ct, tx, postID)
+	post, err := s.repo.FindPostByID(ctx, tx, postID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, e.ErrPostNotFound) {
 			s.rdb.Set(ctx, cacheKey, CacheNullPlaceholder, time.Minute)
@@ -145,6 +155,10 @@ func (s *PostService) UpdatePost(ctx context.Context, tx *gorm.DB, postID, autho
 			post.Status = *status
 		}
 	}
+	err = s.repo.UpdatePost(ctx, tx, post)
+	if err != nil {
+		return err
+	}
 	s.DeletePostCache(ctx, tx, postID)
 	return nil
 }
@@ -163,8 +177,7 @@ func (s *PostService) DeletePost(ctx context.Context, tx *gorm.DB, postID, autho
 	s.DeletePostCache(ctx, tx, postID)
 	return nil
 }
-func (s *PostService) DeletePostCache(ct context.Context, tx *gorm.DB, postID uint) {
-	ctx := context.Background()
+func (s *PostService) DeletePostCache(ctx context.Context, tx *gorm.DB, postID uint) {
 	cacheKey := fmt.Sprintf(CacheKeyPostDetail, postID)
 	s.rdb.Del(ctx, cacheKey)
 }

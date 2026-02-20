@@ -25,15 +25,14 @@ func NewFeedService(feed *repository.FeedRepository, post *repository.PostReposi
 }
 
 // 异步将被关注者的文章推送到关注者的时间线
-func (s *FeedService) PushPostsToFeed(ct context.Context, tx *gorm.DB, followerID, followeeID uint) {
-	posts, err := s.postRepo.FindRecentPostIDsByAuthor(ct, tx, followeeID, FeedPushLimit)
+func (s *FeedService) PushPostsToFeed(ctx context.Context, tx *gorm.DB, followerID, followeeID uint) {
+	posts, err := s.postRepo.FindRecentPostIDsByAuthor(ctx, tx, followeeID, FeedPushLimit)
 	if err != nil {
 		return
 	}
 	if len(posts) == 0 {
 		return
 	}
-	ctx := context.Background()
 	key := fmt.Sprintf("%s%d", FeedKeyPrefix, followerID)
 
 	pipe := s.rdb.Pipeline()

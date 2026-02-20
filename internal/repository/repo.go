@@ -91,13 +91,11 @@ func (r *PostRepository) FindPostByID(ctx context.Context, tx *gorm.DB, id uint)
 		db = tx
 	}
 	var post model.Post
-	err := db.WithContext(ctx).Where("status IN ?", []int{0, 1}).Preload("Author").First(&post, id).Error
+	err := db.WithContext(ctx).Where("status IN ?", []int{model.PostStatusDraft, model.PostStatusPublished}).Preload("Author").First(&post, id).Error
 	if err != nil {
 		return nil, err
 	}
-	if post.Status == 2 {
-		return nil, gorm.ErrRecordNotFound
-	}
+
 	return &post, err
 }
 func (r *PostRepository) FindPostsByIDs(ctx context.Context, tx *gorm.DB, ids []string) ([]model.Post, error) {
@@ -279,7 +277,7 @@ func (r *RelationRepository) GetFollowers(ctx context.Context, tx *gorm.DB, user
 		db = tx
 	}
 	var users []model.User
-	err := db.WithContext(ctx).Table("users").Select("users.id,users.username,users.avatar,users.created_at").Joins("JOIN relations ON user_id = relations.follower_id").Where("relations.followee_id=?", userID).Order("relations.created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
+	err := db.WithContext(ctx).Table("users").Select("users.id,users.username,users.avatar,user.bio,users.created_at").Joins("JOIN relations ON user_id = relations.follower_id").Where("relations.followee_id=?", userID).Order("relations.created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
 	return users, err
 }
 
@@ -522,7 +520,7 @@ func (r *ConnectRepository) GetConnByUser(ctx context.Context, tx *gorm.DB, user
 		db = tx
 	}
 	var posts []model.Post
-	err := db.WithContext(ctx).Table("posts").Joins("JOIN connections ON posts.id =connections.post_id").Where("connections.user_id=?", userID).Order("connections.created_at DESC").Offset(offset).Limit(limit).Error
+	err := db.WithContext(ctx).Table("posts").Joins("JOIN connections ON posts.id =connections.post_id").Where("connections.user_id=?", userID).Order("connections.created_at DESC").Offset(offset).Limit(limit).Find(&posts).Error
 	return posts, err
 }
 func (r *CommentRepository) FindCommentByID(ctx context.Context, tx *gorm.DB, id uint) (*model.Comment, error) {
@@ -559,7 +557,7 @@ func (r *NotificationRepository) GetNotifications(ctx context.Context, tx *gorm.
 		db = tx
 	}
 	var notifications []model.Notification
-	err := db.WithContext(ctx).Where("recipient_id =?", userID).Preload("Actor").Order("created_at DESC").Offset(offset).Limit(limit).Find(&model.Notification{}).Error
+	err := db.WithContext(ctx).Where("recipient_id =?", userID).Preload("Actor").Order("created_at DESC").Offset(offset).Limit(limit).Find(&notifications).Error
 	return notifications, err
 }
 

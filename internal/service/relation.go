@@ -25,7 +25,16 @@ func (s *RelationService) FollowUser(ctx context.Context, tx *gorm.DB, followerI
 	if followerID == followeeID {
 		return e.ErrSelfAction
 	}
-	err := s.repo.Follow(ctx, tx, followerID, followeeID)
+	// 检查是否已关注（可选，防止重复关注）
+	isFollowing, err := s.repo.IsFollowing(ctx, tx, followerID, followeeID)
+	if err != nil {
+		return e.ErrServer
+	}
+	if isFollowing {
+		return e.ErrAlreadyFollowing
+	}
+	// 执行关注
+	err = s.repo.Follow(ctx, tx, followerID, followeeID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return e.ErrAlreadyFollowing
@@ -39,7 +48,8 @@ func (s *RelationService) FollowUser(ctx context.Context, tx *gorm.DB, followerI
 				log.Printf("panic in pushPostsToFeed: %v", r)
 			}
 		}()
-		s.feed.PushPostsToFeed(ctx, tx, followerID, followeeID)
+		ctxfn := context.Background()
+		s.feed.PushPostsToFeed(ctxfn, nil, followerID, followeeID)
 	}()
 	s.notify.sendNotification(ctx, tx, followeeID, followerID, model.NotifyTypeFollow, "关注了你", 0)
 	return nil
