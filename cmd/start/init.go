@@ -6,12 +6,22 @@ import (
 	"go-zhihu/internal/middleware"
 	"go-zhihu/internal/repository"
 	"log"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 func SetRoute(r *gin.Engine, httpHandler *handler.Handler, repos *repository.Repositories, db *gorm.DB) {
+	// CORS 配置 - 允许前端跨域请求
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	publicGroup := r.Group("")
 	{
