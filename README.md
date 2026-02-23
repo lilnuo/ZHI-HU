@@ -1,4 +1,29 @@
 # 知乎社区的Go语言简单实现
+### 1.本项目以 Go + Gin 实现一个模拟知乎风格的 API 服务，包含用户、帖子、评论、点赞、关注等基础逻辑。项目使用 GORM（MySQL）做持久化，Redis 做缓存/限流
+
+### 特性
+    Gin 框架实现 HTTP API
+    GORM 实现 
+    Redis 支持（限流、缓存）
+    Swagger 文档（swaggo）
+    可构建为单一静态二进制并打包为轻量镜像
+
+### 前提
+    Go 1.21+
+    Docker（可选）
+    MySQL 5.7+/8.0+
+    Redis 5+
+
+### 快速开始（本地）
+    1. 克隆仓库
+    git clone https://github.com/lilnuo/ZHI-HU.git
+    2. 准备配置文件 `config/config.yaml`
+    3. 安装依赖并运行
+    go mod tidy
+    go run .
+
+    4. 访问 API
+    默认监听 8080（详见配置），开发环境可访问 Swagger： http://localhost:8080/swagger/index.html
 ### 1.基本的用户系统
     1.注册与登陆
     2.用户基本信息
